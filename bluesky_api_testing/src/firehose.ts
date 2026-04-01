@@ -1,4 +1,5 @@
 import { WebSocket } from "ws";
+
 // @ts-ignore
 import { HttpsProxyAgent } from "https-proxy-agent";
 import * as fs from "fs";
