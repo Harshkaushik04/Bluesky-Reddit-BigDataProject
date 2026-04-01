@@ -31,8 +31,8 @@ const JETSTREAM_URL = 'wss://jetstream2.us-east.bsky.network/subscribe' +
 const agent = new HttpsProxyAgent('http://127.0.0.1:8081');
 const ws = new WebSocket(JETSTREAM_URL, { agent });
 
-console.log("🔥 Starting Neo4j Firehose through Psiphon tunnel...");
-console.log(`📂 Saving data directly to: ${BRONZE_DIR}`);
+console.log("Starting Neo4j Firehose through Psiphon tunnel...");
+console.log(`Saving data directly to: ${BRONZE_DIR}`);
 
 // Keep track of counts for the terminal display
 let postCount = 0;
@@ -71,5 +71,5 @@ setInterval(() => {
 ws.on('error', (err) => console.error("WebSocket Error:", err));
 
 ws.on('close', () => {
-    console.log("❌ Connection closed by server. If Fortinet dropped it, restart the script!");
+    console.log("Connection closed by server. If Fortinet dropped it, restart the script!");
 });
