@@ -6,7 +6,7 @@ import * as fs from "fs";
 import * as path from "path";
 
 // 1. Setup the Absolute Storage Directory
-const BRONZE_DIR = "/home/harsh/big_data/final_project/Bluesky_data/initial_firehose";
+const BRONZE_DIR = "D:\\Bluesky-Reddit-BigDataProject\\Bluesky_data\\initial_firehose";
 
 // Create the directory if it doesn't exist yet
 if (!fs.existsSync(BRONZE_DIR)) {
@@ -29,7 +29,7 @@ const JETSTREAM_URL = 'wss://jetstream2.us-east.bsky.network/subscribe' +
                       '&wantedCollections=app.bsky.graph.follow';
 
 // 4. Connect through the Psiphon local proxy
-const agent = new HttpsProxyAgent('http://127.0.0.1:8081');
+const agent = new HttpsProxyAgent('http://127.0.0.1:64257');
 const ws = new WebSocket(JETSTREAM_URL, { agent });
 
 console.log("Starting Neo4j Firehose through Psiphon tunnel...");
