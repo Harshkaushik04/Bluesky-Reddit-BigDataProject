@@ -30,7 +30,7 @@ const JETSTREAM_URL = 'wss://jetstream2.us-east.bsky.network/subscribe' +
                       '&wantedCollections=app.bsky.graph.follow';
 
 // 4. Connect through the Psiphon local proxy
-const agent = new HttpsProxyAgent('http://127.0.0.1:64257');
+const agent = new HttpsProxyAgent('http://127.0.0.1:58718');
 
 // Global state variables
 let ws: WebSocket | null = null;
