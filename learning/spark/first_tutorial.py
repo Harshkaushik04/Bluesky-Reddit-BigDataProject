@@ -9,5 +9,4 @@ builder = SparkSession.builder.appName("Local_Lakehouse") \
 # 2. Inject the Delta Lake packages into your local Spark engine
 spark = configure_spark_with_delta_pip(builder).getOrCreate()
 
-# Now you can write the exact same code from the tutorial!
-# df = spark.readStream.format("kafka")...
+df=spark.read.format('json').load("/home/harsh/big_data/final_project/Bluesky_data/initial_firehose/bluesky_2026-04-01_00.jsonl")
