@@ -1,7 +1,4 @@
 import { WebSocket } from "ws";
-
-// @ts-ignore
-import { HttpsProxyAgent } from "https-proxy-agent";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -29,9 +26,6 @@ const JETSTREAM_URL = 'wss://jetstream2.us-east.bsky.network/subscribe' +
                       '&wantedCollections=app.bsky.feed.like' + 
                       '&wantedCollections=app.bsky.graph.follow';
 
-// 4. Connect through the Psiphon local proxy
-const agent = new HttpsProxyAgent('http://127.0.0.1:58718');
-
 // Global state variables
 let ws: WebSocket | null = null;
 let postCount = 0;
@@ -39,14 +33,16 @@ let interactionCount = 0;
 let isConnecting = false;
 let lastMessageTime = Date.now(); // Used to detect silent firewall drops
 
-// 2. Wrap the connection logic in a reusable function
+// 3. Wrap the connection logic in a reusable function
 function connect() {
     if (isConnecting) return;
     isConnecting = true;
 
-    console.log("\n[System] Attempting to connect to Neo4j Firehose through Psiphon tunnel...");
+    // Log updated to reflect the direct OS-level VPN routing
+    console.log("\n[System] Attempting to connect to Bluesky Firehose...");
     
-    ws = new WebSocket(JETSTREAM_URL, { agent });
+    // Instantiating WebSocket natively without the proxy agent
+    ws = new WebSocket(JETSTREAM_URL, { family: 4 });
 
     ws.on('open', () => {
         console.log("[System] Connected successfully! Saving data to:", BRONZE_DIR);
@@ -87,10 +83,10 @@ function connect() {
     });
 }
 
-// 3. Start the initial connection
+// 4. Start the initial connection
 connect();
 
-// 4. The 1-Minute Watchdog
+// 5. The 1-Minute Watchdog
 setInterval(() => {
     const now = Date.now();
     const timeSinceLastMessage = now - lastMessageTime;
@@ -109,13 +105,10 @@ setInterval(() => {
         }
         
         connect();
-    } else {
-        // Optional: comment this out if you don't want it cluttering your logs
-        // console.log("[Watchdog] Connection is healthy."); 
     }
 }, 60000);
 
-// 5. Print stats to the terminal every 10 seconds
+// 6. Print stats to the terminal every 10 seconds
 setInterval(() => {
     // Only print if we are actively connected
     if (ws && ws.readyState === WebSocket.OPEN) {
