@@ -10,4 +10,4 @@ venv
 venv/
 wsl_venv
 wsl_venv/
-
+.vscode
