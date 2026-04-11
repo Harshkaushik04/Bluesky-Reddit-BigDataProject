@@ -8,3 +8,6 @@ ca.psiphon.PsiphonTunnel.tunnel-core
 ca.psiphon.PsiphonTunnel.tunnel-core/
 venv
 venv/
+wsl_venv
+wsl_venv/
+
