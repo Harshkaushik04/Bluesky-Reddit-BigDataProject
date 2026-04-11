@@ -3,7 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 
 // 1. Setup the Absolute Storage Directory
-const BRONZE_DIR = "/home/harsh/big_data/final_project/Bluesky_data/initial_firehose";
+const BRONZE_DIR = "D:\\Bluesky-Reddit-BigDataProject\\Bluesky_data\\initial_firehose";
 
 if (!fs.existsSync(BRONZE_DIR)) {
     fs.mkdirSync(BRONZE_DIR, { recursive: true });
