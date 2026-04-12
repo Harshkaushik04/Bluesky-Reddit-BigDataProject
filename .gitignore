@@ -8,9 +8,9 @@ ca.psiphon.PsiphonTunnel.tunnel-core
 ca.psiphon.PsiphonTunnel.tunnel-core/
 venv
 venv/
-<<<<<<< HEAD
 wsl_venv
 wsl_venv/
-=======
->>>>>>> learning
 .vscode
+qdrant
+qdrant/
+
