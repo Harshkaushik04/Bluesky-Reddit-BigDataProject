@@ -6,3 +6,11 @@ Bluesky_data
 Bluesky_data/
 ca.psiphon.PsiphonTunnel.tunnel-core
 ca.psiphon.PsiphonTunnel.tunnel-core/
+venv
+venv/
+wsl_venv
+wsl_venv/
+.vscode
+qdrant
+qdrant/
+
