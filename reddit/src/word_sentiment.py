@@ -51,7 +51,7 @@ print("Writing to JSON file...")
 
 # 7. Write the Gold Data to a JSON file
 # coalesce(1) forces Spark to combine everything into ONE single file instead of hundreds of tiny files
-output_path = r"D:\Documents_D\HOMEWORK\6th_sem\Big_Data_AI528\project\Bluesky-Reddit-BigDataProject\reddit\word_scores"
+output_path = r"D:\Documents_D\HOMEWORK\6th_sem\Big_Data_AI528\project\Bluesky-Reddit-BigDataProject\reddit\output\word_scores"
 
 scored_words.coalesce(1).write.mode("overwrite").json(output_path)
 
