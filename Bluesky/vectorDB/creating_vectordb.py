@@ -18,9 +18,6 @@ NAMESPACE_BLUESKY = uuid.uuid5(uuid.NAMESPACE_URL, "bluesky.network")
 print("Connecting to Qdrant...")
 client = QdrantClient(url="http://localhost:6333")
 
-if client.collection_exists(collection_name=COLLECTION_NAME):
-    client.delete_collection(collection_name=COLLECTION_NAME)
-
 client.create_collection(
     collection_name=COLLECTION_NAME,
     vectors_config=models.VectorParams(
