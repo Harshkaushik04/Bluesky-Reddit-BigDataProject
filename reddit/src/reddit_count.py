@@ -1,9 +1,16 @@
+# give word count for specific word
+
+
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col
 
 # 1. Initialize Spark Engine
 # Starts the background Java engine for data processing
-spark = SparkSession.builder.appName("RedditWordCount").getOrCreate()
+# 1. Initialize Spark Engine with 4GB of RAM
+spark = SparkSession.builder \
+    .appName("RedditWordCount") \
+    .config("spark.driver.memory", "4g") \
+    .getOrCreate()
 
 print("Loading Data...")
 

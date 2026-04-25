@@ -13,4 +13,6 @@ wsl_venv/
 .vscode
 qdrant
 qdrant/
+pycache/
+
 
