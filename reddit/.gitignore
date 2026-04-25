@@ -1,2 +1,6 @@
 reddit_data/
 venv/
+output/
+my_stuff/
+my_stuff
+__pycache__/
