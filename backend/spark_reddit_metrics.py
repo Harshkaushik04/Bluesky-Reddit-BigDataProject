@@ -166,19 +166,30 @@ def main() -> None:
     )
     spark.sparkContext.setLogLevel("WARN")
 
-    posts_df = spark.read.json(POSTS_GLOB).select(
-        F.col("id").alias("post_id"),
-        F.col("subreddit"),
-        F.col("title"),
-        F.col("score").cast("double").alias("score"),
-        F.col("ups").cast("double").alias("ups"),
-        F.col("downs").cast("double").alias("downs"),
-        F.col("num_comments").cast("double").alias("num_comments"),
-        F.col("post_hint"),
-        F.col("is_video"),
-        F.col("url"),
-        F.col("selftext"),
-        F.col("created_utc").cast("double").alias("created_utc"),
+    raw_df = spark.read.json(POSTS_GLOB)
+    available_cols = set(raw_df.columns)
+
+    def safe_col(name: str):
+        return F.col(name) if name in available_cols else F.lit(None)
+
+    posts_df = raw_df.select(
+        safe_col("id").alias("post_id"),
+        safe_col("subreddit").alias("subreddit"),
+        safe_col("title").alias("title"),
+        safe_col("score").cast("double").alias("score"),
+        safe_col("ups").cast("double").alias("ups"),
+        safe_col("downs").cast("double").alias("downs"),
+        safe_col("num_comments").cast("double").alias("num_comments"),
+        safe_col("post_hint").alias("post_hint"),
+        safe_col("is_video").alias("is_video"),
+        safe_col("url").alias("url"),
+        safe_col("domain").alias("domain"),
+        safe_col("url_overridden_by_dest").alias("url_overridden_by_dest"),
+        safe_col("selftext").alias("selftext"),
+        safe_col("is_gallery").alias("is_gallery"),
+        safe_col("crosspost_parent").alias("crosspost_parent"),
+        safe_col("poll_data").alias("poll_data"),
+        safe_col("created_utc").cast("double").alias("created_utc"),
     )
 
     records_scanned = posts_df.count()
@@ -299,14 +310,41 @@ def main() -> None:
             .withColumn("post_hint", F.lower(F.coalesce(F.col("post_hint"), F.lit(""))))
             .withColumn("is_video", F.coalesce(F.col("is_video"), F.lit(False)))
             .withColumn("url", F.lower(F.coalesce(F.col("url"), F.lit(""))))
+            .withColumn("domain", F.lower(F.coalesce(F.col("domain"), F.lit(""))))
+            .withColumn(
+                "url_overridden_by_dest",
+                F.lower(F.coalesce(F.col("url_overridden_by_dest"), F.lit(""))),
+            )
             .withColumn("selftext", F.trim(F.coalesce(F.col("selftext"), F.lit(""))))
+            .withColumn("is_gallery", F.coalesce(F.col("is_gallery"), F.lit(False)))
+            .withColumn("crosspost_parent", F.coalesce(F.col("crosspost_parent"), F.lit("")))
+            .withColumn("poll_data", F.coalesce(F.col("poll_data"), F.lit(None)))
             .withColumn(
                 "post_type",
-                F.when(F.col("is_video") == True, F.lit("video"))
+                F.when(F.col("is_gallery") == True, F.lit("gallery"))
                 .when(
-                    F.col("post_hint").isin("image", "rich:video", "hosted:video")
-                    | F.col("url").rlike(r"\\.(jpg|jpeg|png|gif|webp)(\\?|$)"),
-                    F.lit("photo"),
+                    (F.col("is_video") == True)
+                    | (F.col("post_hint").isin("rich:video", "hosted:video", "video"))
+                    | (F.col("url").rlike(r"\\.(mp4|mov|webm|mkv)(\\?|$)"))
+                    | (F.col("url_overridden_by_dest").rlike(r"\\.(mp4|mov|webm|mkv)(\\?|$)"))
+                    | (F.col("url").rlike(r"(v\\.redd\\.it|youtube\\.com|youtu\\.be|streamable\\.com|twitch\\.tv|redgifs\\.com|gfycat\\.com)"))
+                    | (F.col("url_overridden_by_dest").rlike(r"(v\\.redd\\.it|youtube\\.com|youtu\\.be|streamable\\.com|twitch\\.tv|redgifs\\.com|gfycat\\.com)"))
+                    | (F.col("domain").rlike(r"(v\\.redd\\.it|youtube\\.com|youtu\\.be|streamable\\.com|twitch\\.tv|redgifs\\.com|gfycat\\.com)")),
+                    F.lit("video"),
+                )
+                .when(
+                    F.col("post_hint").isin("image")
+                    | F.col("url").rlike(r"\\.(jpg|jpeg|png|gif|webp)(\\?|$)")
+                    | F.col("url_overridden_by_dest").rlike(r"\\.(jpg|jpeg|png|gif|webp)(\\?|$)")
+                    | F.col("domain").rlike(r"(i\\.redd\\.it|imgur\\.com|flickr\\.com|images?)"),
+                    F.lit("image"),
+                )
+                .when(F.col("poll_data").isNotNull() | (F.col("post_hint") == F.lit("poll")), F.lit("poll"))
+                .when(F.length(F.col("crosspost_parent")) > 0, F.lit("crosspost"))
+                .when(
+                    (F.col("post_hint") == F.lit("link"))
+                    | ((F.length(F.col("url")) > 0) & (F.length(F.col("selftext")) == 0)),
+                    F.lit("link"),
                 )
                 .when(F.length(F.col("selftext")) > 0, F.lit("text"))
                 .otherwise(F.lit("other")),

@@ -332,18 +332,21 @@ def reddit_overview(
                 FROM reddit_post_facts
                 WHERE {where_clause}
                 GROUP BY COALESCE(post_type, 'other')
+                ORDER BY value DESC
                 """,
                 where_params,
             ).fetchall()
         else:
             post_type_rows = [("other", total_posts)]
-        post_type_counter = {str(row[0]).lower(): int(row[1]) for row in post_type_rows}
-        total_posts_for_type = max(sum(post_type_counter.values()), 1)
-        post_type_split = []
-        for label in ["video", "photo", "text", "other"]:
-            value = int(post_type_counter.get(label, 0))
-            percent = (value * 100.0) / total_posts_for_type
-            post_type_split.append({"label": label, "value": value, "percent": round(percent, 2)})
+        total_posts_for_type = max(sum(int(row[1]) for row in post_type_rows), 1)
+        post_type_split = [
+            {
+                "label": str(row[0]).lower(),
+                "value": int(row[1]),
+                "percent": round((int(row[1]) * 100.0) / total_posts_for_type, 2),
+            }
+            for row in post_type_rows
+        ]
 
         return {
             "meta": {

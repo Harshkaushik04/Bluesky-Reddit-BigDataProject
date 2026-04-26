@@ -52,11 +52,6 @@
 
     <section class="analytics-grid">
       <article class="panel">
-        <h3>Content Split</h3>
-        <div class="donut" id="content-split-donut"></div>
-        <div class="legend"><span id="legend-posts">Posts</span><span id="legend-comments">Comments</span></div>
-      </article>
-      <article class="panel">
         <h3>Data Volume Over Time</h3>
         <div class="volume-legend">
           <span class="legend-item legend-posts">Posts</span>
@@ -65,6 +60,15 @@
         </div>
         <p class="volume-period-label" id="volume-period-label">Period: loading...</p>
         <div class="volume-chart-wrap" id="volume-chart-wrap"></div>
+        <div class="volume-range">
+          <span id="volume-start-label">Start: -</span>
+          <span id="volume-end-label">End: -</span>
+        </div>
+      </article>
+      <article class="panel">
+        <h3>Content Split</h3>
+        <div class="donut" id="content-split-donut"></div>
+        <div class="legend"><span id="legend-posts">Posts</span><span id="legend-comments">Comments</span></div>
       </article>
     </section>
 

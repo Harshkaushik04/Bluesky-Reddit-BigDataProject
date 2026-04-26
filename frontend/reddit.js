@@ -2,10 +2,15 @@ const API_URL = "http://127.0.0.1:8000/api/reddit/overview";
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const POST_TYPE_COLORS = {
   video: "#ff8a8a",
-  photo: "#ff4d67",
+  image: "#ff4d67",
   text: "#ff304a",
+  link: "#ff6b35",
+  gallery: "#f59e0b",
+  poll: "#a855f7",
+  crosspost: "#22c55e",
   other: "#7d3d45",
 };
+const FALLBACK_TYPE_COLORS = ["#f43f5e", "#f97316", "#f59e0b", "#84cc16", "#10b981", "#06b6d4", "#3b82f6", "#8b5cf6"];
 
 const filterState = { year: "overall", months: [] };
 
@@ -61,12 +66,14 @@ function renderTimeline(series) {
   if (!container) return;
   if (!series || series.length === 0) {
     container.innerHTML = "<p>No timeline data available.</p>";
+    setText("volume-start-label", "Start: -");
+    setText("volume-end-label", "End: -");
     return;
   }
 
   const width = 760;
   const height = 165;
-  const padding = { top: 8, right: 8, bottom: 14, left: 8 };
+  const padding = { top: 8, right: 20, bottom: 18, left: 20 };
   const plotW = width - padding.left - padding.right;
   const plotH = height - padding.top - padding.bottom;
 
@@ -114,6 +121,44 @@ function renderTimeline(series) {
       ${xTicks}
     </svg>
   `;
+
+  setText("volume-start-label", `Start: ${series[0].bucket}`);
+  setText("volume-end-label", `End: ${series[series.length - 1].bucket}`);
+
+  const svg = container.querySelector("svg");
+  if (!svg) return;
+  let tooltip = container.querySelector(".chart-tooltip");
+  if (!tooltip) {
+    tooltip = document.createElement("div");
+    tooltip.className = "chart-tooltip";
+    tooltip.style.display = "none";
+    container.appendChild(tooltip);
+  }
+
+  const updateTooltip = (clientX, clientY) => {
+    const rect = svg.getBoundingClientRect();
+    const relativeX = Math.max(0, Math.min(clientX - rect.left, rect.width));
+    const normalized = rect.width <= 0 ? 0 : relativeX / rect.width;
+    const idx = Math.max(0, Math.min(series.length - 1, Math.round(normalized * (series.length - 1))));
+    const point = series[idx];
+
+    tooltip.innerHTML = `
+      <div><strong>${point.bucket}</strong></div>
+      <div>Posts: ${formatNumber(point.posts)}</div>
+      <div>Upvotes: ${formatNumber(point.upvotes)}</div>
+      <div>Comments: ${formatNumber(point.comments)}</div>
+      <div>Total: ${formatNumber(point.total)}</div>
+    `;
+    tooltip.style.display = "block";
+    tooltip.style.left = `${Math.min(Math.max(relativeX + 12, 8), rect.width - 150)}px`;
+    tooltip.style.top = `${Math.max((clientY - rect.top) - 76, 8)}px`;
+  };
+
+  svg.onmousemove = (event) => updateTooltip(event.clientX, event.clientY);
+  svg.onmouseenter = (event) => updateTooltip(event.clientX, event.clientY);
+  svg.onmouseleave = () => {
+    tooltip.style.display = "none";
+  };
 }
 
 function renderPostTypePie(split) {
@@ -128,10 +173,11 @@ function renderPostTypePie(split) {
   }
 
   let start = 0;
-  const segments = split.map((item) => {
+  const getColor = (label, idx) => POST_TYPE_COLORS[label] || FALLBACK_TYPE_COLORS[idx % FALLBACK_TYPE_COLORS.length];
+  const segments = split.map((item, idx) => {
     const pct = Number(item.percent || 0);
     const end = start + pct;
-    const color = POST_TYPE_COLORS[item.label] || "#7d3d45";
+    const color = getColor(item.label, idx);
     const segment = `${color} ${start}% ${end}%`;
     start = end;
     return segment;
@@ -139,8 +185,8 @@ function renderPostTypePie(split) {
   pie.style.background = `conic-gradient(${segments.join(", ")})`;
 
   list.innerHTML = split
-    .map((item) => {
-      const color = POST_TYPE_COLORS[item.label] || "#7d3d45";
+    .map((item, idx) => {
+      const color = getColor(item.label, idx);
       return `<div class="post-type-row"><span class="post-type-color" style="background:${color}"></span><span>${item.label}</span><span>${Number(item.percent || 0).toFixed(1)}%</span><span>${formatNumber(item.value || 0)}</span></div>`;
     })
     .join("");
