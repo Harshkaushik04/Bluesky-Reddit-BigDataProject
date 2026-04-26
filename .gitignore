@@ -14,5 +14,5 @@ wsl_venv/
 qdrant
 qdrant/
 pycache/
-
+models/
 
