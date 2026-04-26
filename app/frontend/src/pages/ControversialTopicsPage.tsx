@@ -10,7 +10,7 @@ const colors = ["#1d7cff", "#00d4ff", "#5ba6ff", "#0ec9ff", "#80d8ff", "#3f8cff"
 
 export function ControversialTopicsPage() {
   const now = new Date();
-  const [from, setFrom] = useState(new Date(now.getTime() - 7 * 86400000).toISOString().slice(0, 16));
+  const [from, setFrom] = useState(new Date(now.getTime() - 60 * 86400000).toISOString().slice(0, 16));
   const [to, setTo] = useState(now.toISOString().slice(0, 16));
   const [topN, setTopN] = useState(10);
 
@@ -47,16 +47,20 @@ export function ControversialTopicsPage() {
           <input type="number" min={1} max={30} value={topN} onChange={(e) => setTopN(Number(e.target.value))} />
         </label>
       </div>
-      <ResponsiveContainer width="100%" height={420}>
-        <PieChart>
-          <Pie data={pieData} dataKey="value" nameKey="name" outerRadius={150} label>
-            {pieData.map((_, idx) => (
-              <Cell key={idx} fill={colors[idx % colors.length]} />
-            ))}
-          </Pie>
-          <Tooltip />
-        </PieChart>
-      </ResponsiveContainer>
+      {pieData.length === 0 ? (
+        <p>No controversial topics were returned for this range.</p>
+      ) : (
+        <ResponsiveContainer width="100%" height={420}>
+          <PieChart>
+            <Pie data={pieData} dataKey="value" nameKey="name" outerRadius={150} label>
+              {pieData.map((_, idx) => (
+                <Cell key={idx} fill={colors[idx % colors.length]} />
+              ))}
+            </Pie>
+            <Tooltip />
+          </PieChart>
+        </ResponsiveContainer>
+      )}
     </ChartPanel>
   );
 }

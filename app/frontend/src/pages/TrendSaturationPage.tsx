@@ -9,7 +9,7 @@ const colors = ["#1d7cff", "#00d4ff", "#5ba6ff", "#0ec9ff", "#80d8ff", "#3f8cff"
 
 export function TrendSaturationPage() {
   const now = new Date();
-  const [from, setFrom] = useState(new Date(now.getTime() - 14 * 86400000).toISOString().slice(0, 16));
+  const [from, setFrom] = useState(new Date(now.getTime() - 60 * 86400000).toISOString().slice(0, 16));
   const [to, setTo] = useState(now.toISOString().slice(0, 16));
   const [numTopics, setNumTopics] = useState(10);
   const { data, loading, error } = usePolling(
@@ -59,18 +59,22 @@ export function TrendSaturationPage() {
           />
         </label>
       </div>
-      <ResponsiveContainer width="100%" height={420}>
-        <LineChart data={chartRows}>
-          <CartesianGrid stroke="#1f3b67" />
-          <XAxis dataKey="time" stroke="#8cc7ff" tick={{ fontSize: 10 }} />
-          <YAxis stroke="#8cc7ff" />
-          <Tooltip />
-          <Legend />
-          {Object.keys(byWord).map((word, idx) => (
-            <Line key={word} type="monotone" dataKey={word} stroke={colors[idx % colors.length]} />
-          ))}
-        </LineChart>
-      </ResponsiveContainer>
+      {chartRows.length === 0 ? (
+        <p>No trend-saturation data found for this time window.</p>
+      ) : (
+        <ResponsiveContainer width="100%" height={420}>
+          <LineChart data={chartRows}>
+            <CartesianGrid stroke="#1f3b67" />
+            <XAxis dataKey="time" stroke="#8cc7ff" tick={{ fontSize: 10 }} />
+            <YAxis stroke="#8cc7ff" />
+            <Tooltip />
+            <Legend />
+            {Object.keys(byWord).map((word, idx) => (
+              <Line key={word} type="monotone" dataKey={word} stroke={colors[idx % colors.length]} />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      )}
     </ChartPanel>
   );
 }

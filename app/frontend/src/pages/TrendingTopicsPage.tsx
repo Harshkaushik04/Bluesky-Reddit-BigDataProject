@@ -11,7 +11,7 @@ const colors = ["#1d7cff", "#00d4ff", "#5ba6ff", "#0ec9ff", "#80d8ff", "#4d9cff"
 
 export function TrendingTopicsPage() {
   const now = new Date();
-  const [from, setFrom] = useState(new Date(now.getTime() - 14 * 86400000).toISOString().slice(0, 16));
+  const [from, setFrom] = useState(new Date(now.getTime() - 60 * 86400000).toISOString().slice(0, 16));
   const [to, setTo] = useState(now.toISOString().slice(0, 16));
   const [numWords, setNumWords] = useState(10);
 
@@ -59,18 +59,22 @@ export function TrendingTopicsPage() {
           />
         </label>
       </div>
-      <ResponsiveContainer width="100%" height={420}>
-        <LineChart data={chartData}>
-          <CartesianGrid stroke="#1f3b67" />
-          <XAxis dataKey="time" stroke="#8cc7ff" tick={{ fontSize: 10 }} />
-          <YAxis stroke="#8cc7ff" />
-          <Tooltip />
-          <Legend />
-          {(data?.words ?? []).map((series, idx) => (
-            <Line key={series.word} type="monotone" dataKey={series.word} stroke={colors[idx % colors.length]} />
-          ))}
-        </LineChart>
-      </ResponsiveContainer>
+      {chartData.length === 0 ? (
+        <p>No trending-topic points found for this range.</p>
+      ) : (
+        <ResponsiveContainer width="100%" height={420}>
+          <LineChart data={chartData}>
+            <CartesianGrid stroke="#1f3b67" />
+            <XAxis dataKey="time" stroke="#8cc7ff" tick={{ fontSize: 10 }} />
+            <YAxis stroke="#8cc7ff" />
+            <Tooltip />
+            <Legend />
+            {(data?.words ?? []).map((series, idx) => (
+              <Line key={series.word} type="monotone" dataKey={series.word} stroke={colors[idx % colors.length]} />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      )}
     </ChartPanel>
   );
 }

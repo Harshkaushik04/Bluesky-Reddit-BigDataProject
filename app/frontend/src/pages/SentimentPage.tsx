@@ -10,7 +10,7 @@ export function SentimentPage() {
   const [word, setWord] = useState("bandwidth");
   const [searchWord, setSearchWord] = useState("bandwidth");
   const end = new Date();
-  const start = new Date(end.getTime() - 14 * 24 * 60 * 60 * 1000);
+  const start = new Date(end.getTime() - 60 * 24 * 60 * 60 * 1000);
 
   const { data, loading, error } = usePolling(
     () =>
@@ -40,15 +40,19 @@ export function SentimentPage() {
         <input value={word} onChange={(e) => setWord(e.target.value)} placeholder="Search word" />
         <button type="submit">Search</button>
       </form>
-      <ResponsiveContainer width="100%" height={400}>
-        <BarChart data={points}>
-          <CartesianGrid stroke="#1f3b67" />
-          <XAxis dataKey="time" stroke="#8cc7ff" tick={{ fontSize: 10 }} />
-          <YAxis stroke="#8cc7ff" />
-          <Tooltip />
-          <Bar dataKey="sentiment" fill="#00d4ff" />
-        </BarChart>
-      </ResponsiveContainer>
+      {points.length === 0 ? (
+        <p>No sentiment data found for this word in the selected window.</p>
+      ) : (
+        <ResponsiveContainer width="100%" height={400}>
+          <BarChart data={points}>
+            <CartesianGrid stroke="#1f3b67" />
+            <XAxis dataKey="time" stroke="#8cc7ff" tick={{ fontSize: 10 }} />
+            <YAxis stroke="#8cc7ff" />
+            <Tooltip />
+            <Bar dataKey="sentiment" fill="#00d4ff" />
+          </BarChart>
+        </ResponsiveContainer>
+      )}
     </ChartPanel>
   );
 }
