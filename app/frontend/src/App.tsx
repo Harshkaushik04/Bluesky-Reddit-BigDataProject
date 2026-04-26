@@ -7,6 +7,7 @@ import { ActionRecommendorPage } from "./pages/ActionRecommendorPage";
 import { ControversialTopicsPage } from "./pages/ControversialTopicsPage";
 import { CrossLinksPage } from "./pages/CrossLinksPage";
 import { TrendSaturationPage } from "./pages/TrendSaturationPage";
+import { WordPopularityPage } from "./pages/WordPopularityPage";
 
 function App() {
   return (
@@ -15,6 +16,7 @@ function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/sentiment-analysis" element={<SentimentPage />} />
         <Route path="/trending-topics" element={<TrendingTopicsPage />} />
+        <Route path="/word-popularity" element={<WordPopularityPage />} />
         <Route path="/action-recommendor" element={<ActionRecommendorPage />} />
         <Route path="/controversial-topics" element={<ControversialTopicsPage />} />
         <Route path="/cross-links" element={<CrossLinksPage />} />

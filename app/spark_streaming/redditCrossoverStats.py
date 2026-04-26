@@ -23,7 +23,7 @@ def main():
         .filter(lower(col("record.text")).contains("reddit.com"))
         .withColumn("topic_name", explode(array_distinct(split(lower(col("record.text")), r"\s+"))))
         .filter(~col("topic_name").contains("reddit.com"))
-        .groupBy(window(col("timestamp"), "2 hours").alias("time_window"), "topic_name")
+        .groupBy(window(col("timestamp"), "10 minutes").alias("time_window"), "topic_name")
         .agg(count("*").alias("reddit_link_count"))
         .select("topic_name", col("time_window.start").alias("time_bucket"), "reddit_link_count")
     )

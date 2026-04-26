@@ -23,7 +23,7 @@ def main():
         source_df.filter(col("commit.record.langs") == array(lit("en")))
         .withColumn("timestamp", timestamp_micros(col("time_us")))
         .withColumn("word", explode(split(col("commit.record.text"), r"\s+")))
-        .groupBy(col("word"), window(col("timestamp"), "2 hours").alias("time_window"))
+        .groupBy(col("word"), window(col("timestamp"), "10 minutes").alias("time_window"))
         .agg(
             avg(col("vader_sentiment_score")).alias("avg_vader_sentiment_score"),
             count("*").alias("word_count"),

@@ -3,17 +3,16 @@ import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, X
 import { postApi } from "../api";
 import { usePolling } from "../hooks";
 import { ChartPanel } from "../components/ChartPanel";
+import { seriesColor } from "../utils/chartColors";
 
 type WordSeries = { word: string; popularity: { time_range: string; popularity: number }[] };
 type Response = { words: WordSeries[] };
-
-const colors = ["#1d7cff", "#00d4ff", "#5ba6ff", "#0ec9ff", "#80d8ff", "#4d9cff"];
 
 export function TrendingTopicsPage() {
   const now = new Date();
   const [from, setFrom] = useState(new Date(now.getTime() - 60 * 86400000).toISOString().slice(0, 16));
   const [to, setTo] = useState(now.toISOString().slice(0, 16));
-  const [numWords, setNumWords] = useState(10);
+  const [numWords, setNumWords] = useState(8);
 
   const { data, loading, error } = usePolling(
     () =>
@@ -26,7 +25,9 @@ export function TrendingTopicsPage() {
   );
 
   const chartData = useMemo(() => {
+    const words = (data?.words ?? []).map((series) => series.word);
     const byTime = new Map<string, Record<string, string | number>>();
+
     (data?.words ?? []).forEach((series) => {
       series.popularity.forEach((pt) => {
         const row = byTime.get(pt.time_range) ?? { time: pt.time_range };
@@ -34,7 +35,19 @@ export function TrendingTopicsPage() {
         byTime.set(pt.time_range, row);
       });
     });
-    return Array.from(byTime.values());
+
+    const orderedRows = Array.from(byTime.values()).sort(
+      (a, b) => new Date(String(a.time)).getTime() - new Date(String(b.time)).getTime(),
+    );
+
+    // For sparse words, show 0 instead of gaps so lines stay readable.
+    orderedRows.forEach((row) => {
+      words.forEach((word) => {
+        if (row[word] === undefined) row[word] = 0;
+      });
+    });
+
+    return orderedRows;
   }, [data]);
 
   return (
@@ -65,12 +78,22 @@ export function TrendingTopicsPage() {
         <ResponsiveContainer width="100%" height={420}>
           <LineChart data={chartData}>
             <CartesianGrid stroke="#1f3b67" />
-            <XAxis dataKey="time" stroke="#8cc7ff" tick={{ fontSize: 10 }} />
+            <XAxis dataKey="time" stroke="#8cc7ff" tick={{ fontSize: 10 }} minTickGap={36} interval="preserveStartEnd" />
             <YAxis stroke="#8cc7ff" />
             <Tooltip />
             <Legend />
             {(data?.words ?? []).map((series, idx) => (
-              <Line key={series.word} type="monotone" dataKey={series.word} stroke={colors[idx % colors.length]} />
+              <Line
+                key={series.word}
+                type="monotone"
+                dataKey={series.word}
+                stroke={seriesColor(idx)}
+                strokeWidth={2.6}
+                dot={false}
+                connectNulls
+                activeDot={false}
+                isAnimationActive={false}
+              />
             ))}
           </LineChart>
         </ResponsiveContainer>

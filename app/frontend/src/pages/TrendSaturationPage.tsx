@@ -1,17 +1,16 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { postApi } from "../api";
 import { usePolling } from "../hooks";
 import { ChartPanel } from "../components/ChartPanel";
+import { seriesColor } from "../utils/chartColors";
 
 type Response = { data: Record<string, Record<string, number>[]> };
-const colors = ["#1d7cff", "#00d4ff", "#5ba6ff", "#0ec9ff", "#80d8ff", "#3f8cff"];
-
 export function TrendSaturationPage() {
   const now = new Date();
   const [from, setFrom] = useState(new Date(now.getTime() - 60 * 86400000).toISOString().slice(0, 16));
   const [to, setTo] = useState(now.toISOString().slice(0, 16));
-  const [numTopics, setNumTopics] = useState(10);
+  const [numTopics, setNumTopics] = useState(8);
   const { data, loading, error } = usePolling(
     () =>
       postApi<Response, Record<string, string | number>>("/getTrendSaturation", {
@@ -22,20 +21,33 @@ export function TrendSaturationPage() {
     [from, to, numTopics],
   );
 
-  const chartRows: Record<string, string | number>[] = [];
   const byWord = data?.data ?? {};
+  const chartRows = useMemo(() => {
+    const rowsMap = new Map<string, Record<string, string | number>>();
+    const words = Object.keys(byWord);
 
-  Object.entries(byWord).forEach(([word, points]) => {
-    points.forEach((entry) => {
-      const [time, val] = Object.entries(entry)[0];
-      let row = chartRows.find((r) => r.time === time);
-      if (!row) {
-        row = { time };
-        chartRows.push(row);
-      }
-      row[word] = val;
+    Object.entries(byWord).forEach(([word, points]) => {
+      points.forEach((entry) => {
+        const [time, val] = Object.entries(entry)[0];
+        const row = rowsMap.get(time) ?? { time };
+        row[word] = val;
+        rowsMap.set(time, row);
+      });
     });
-  });
+
+    const rows = Array.from(rowsMap.values()).sort(
+      (a, b) => new Date(String(a.time)).getTime() - new Date(String(b.time)).getTime(),
+    );
+
+    // Fill sparse points for cleaner trajectories.
+    rows.forEach((row) => {
+      words.forEach((word) => {
+        if (row[word] === undefined) row[word] = 0;
+      });
+    });
+
+    return rows;
+  }, [byWord]);
 
   return (
     <ChartPanel title="Trend Saturation Monitor" loading={loading} error={error}>
@@ -65,12 +77,22 @@ export function TrendSaturationPage() {
         <ResponsiveContainer width="100%" height={420}>
           <LineChart data={chartRows}>
             <CartesianGrid stroke="#1f3b67" />
-            <XAxis dataKey="time" stroke="#8cc7ff" tick={{ fontSize: 10 }} />
+            <XAxis dataKey="time" stroke="#8cc7ff" tick={{ fontSize: 10 }} minTickGap={36} interval="preserveStartEnd" />
             <YAxis stroke="#8cc7ff" />
             <Tooltip />
             <Legend />
             {Object.keys(byWord).map((word, idx) => (
-              <Line key={word} type="monotone" dataKey={word} stroke={colors[idx % colors.length]} />
+              <Line
+                key={word}
+                type="monotone"
+                dataKey={word}
+                stroke={seriesColor(idx)}
+                strokeWidth={2.6}
+                dot={false}
+                connectNulls
+                activeDot={false}
+                isAnimationActive={false}
+              />
             ))}
           </LineChart>
         </ResponsiveContainer>

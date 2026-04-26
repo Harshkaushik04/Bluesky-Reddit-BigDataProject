@@ -1,5 +1,14 @@
 import { useState } from "react";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { postApi } from "../api";
 import { usePolling } from "../hooks";
 import { ChartPanel } from "../components/ChartPanel";
@@ -29,7 +38,7 @@ export function SentimentPage() {
     }) ?? [];
 
   return (
-    <ChartPanel title="Word Sentiment vs Time (2h buckets)" loading={loading} error={error}>
+    <ChartPanel title="Word Sentiment vs Time (10-min buckets)" loading={loading} error={error}>
       <form
         className="controls"
         onSubmit={(e) => {
@@ -44,13 +53,14 @@ export function SentimentPage() {
         <p>No sentiment data found for this word in the selected window.</p>
       ) : (
         <ResponsiveContainer width="100%" height={400}>
-          <BarChart data={points}>
+          <LineChart data={points}>
             <CartesianGrid stroke="#1f3b67" />
             <XAxis dataKey="time" stroke="#8cc7ff" tick={{ fontSize: 10 }} />
             <YAxis stroke="#8cc7ff" />
             <Tooltip />
-            <Bar dataKey="sentiment" fill="#00d4ff" />
-          </BarChart>
+            <ReferenceLine y={0} stroke="#4d8bc1" strokeDasharray="5 5" />
+            <Line dataKey="sentiment" type="monotone" stroke="#00d4ff" strokeWidth={2.4} dot={false} />
+          </LineChart>
         </ResponsiveContainer>
       )}
     </ChartPanel>

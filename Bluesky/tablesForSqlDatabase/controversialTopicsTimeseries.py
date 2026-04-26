@@ -28,9 +28,9 @@ controversialPosts_df = getPosts_df.withColumn(
 # 4. Filter thresholds
 controversialPosts_df = controversialPosts_df.filter((col("like_to_comment_ratio") != 0) & (col("replyCount") >= 50))
 
-# 5. Extract Timestamp and create a Daily Time Bucket (FIXED: using indexedAt)
+# 5. Extract Timestamp and create a 10-Minute Time Bucket (FIXED: using window)
 controversialPosts_df = controversialPosts_df.withColumn("timestamp", to_timestamp(col("indexedAt"))) \
-    .withColumn("time_bucket", date_trunc("day", col("timestamp")))
+    .withColumn("time_bucket", window(col("timestamp"), "10 minutes").start)
 
 # 6. Text Processing (This was already correctly pointing to record.text)
 controversialPosts_df = controversialPosts_df.withColumn(

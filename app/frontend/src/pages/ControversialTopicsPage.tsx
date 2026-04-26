@@ -1,13 +1,12 @@
-import { useState } from "react";
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { useMemo, useState } from "react";
+import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { postApi } from "../api";
 import { usePolling } from "../hooks";
 import { ChartPanel } from "../components/ChartPanel";
+import { seriesColor } from "../utils/chartColors";
 
 type Topic = { topic_name: string; average_like_to_comment_ratio: number };
 type Response = { ranges: { range: string; topics: Topic[] }[] };
-const colors = ["#1d7cff", "#00d4ff", "#5ba6ff", "#0ec9ff", "#80d8ff", "#3f8cff", "#27d8ff"];
-
 export function ControversialTopicsPage() {
   const now = new Date();
   const [from, setFrom] = useState(new Date(now.getTime() - 60 * 86400000).toISOString().slice(0, 16));
@@ -24,15 +23,29 @@ export function ControversialTopicsPage() {
     [from, to, topN],
   );
 
-  const latestRange = data?.ranges[data.ranges.length - 1];
-  const pieData =
-    latestRange?.topics.map((topic) => ({
-      name: topic.topic_name,
-      value: topic.average_like_to_comment_ratio,
-    })) ?? [];
+  const barData = useMemo(() => {
+    const aggregate = new Map<string, { total: number; count: number }>();
+    (data?.ranges ?? []).forEach((rangeEntry) => {
+      rangeEntry.topics.forEach((topic) => {
+        const prev = aggregate.get(topic.topic_name) ?? { total: 0, count: 0 };
+        aggregate.set(topic.topic_name, {
+          total: prev.total + topic.average_like_to_comment_ratio,
+          count: prev.count + 1,
+        });
+      });
+    });
+
+    return Array.from(aggregate.entries())
+      .map(([name, stats]) => ({
+        name,
+        value: Number((stats.total / stats.count).toFixed(2)),
+      }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, topN);
+  }, [data, topN]);
 
   return (
-    <ChartPanel title="Controversial Topics (latest range in selected window)" loading={loading} error={error}>
+    <ChartPanel title="Controversial Topics (avg ratio across selected range)" loading={loading} error={error}>
       <div className="controls">
         <label>
           Start
@@ -47,18 +60,21 @@ export function ControversialTopicsPage() {
           <input type="number" min={1} max={30} value={topN} onChange={(e) => setTopN(Number(e.target.value))} />
         </label>
       </div>
-      {pieData.length === 0 ? (
+      {barData.length === 0 ? (
         <p>No controversial topics were returned for this range.</p>
       ) : (
         <ResponsiveContainer width="100%" height={420}>
-          <PieChart>
-            <Pie data={pieData} dataKey="value" nameKey="name" outerRadius={150} label>
-              {pieData.map((_, idx) => (
-                <Cell key={idx} fill={colors[idx % colors.length]} />
-              ))}
-            </Pie>
+          <BarChart data={barData} layout="vertical" margin={{ left: 20, right: 12 }}>
+            <CartesianGrid stroke="#1f3b67" />
+            <XAxis type="number" stroke="#8cc7ff" />
+            <YAxis type="category" dataKey="name" stroke="#8cc7ff" tick={{ fontSize: 11 }} width={180} />
             <Tooltip />
-          </PieChart>
+            <Bar dataKey="value" radius={[0, 8, 8, 0]}>
+              {barData.map((_, idx) => (
+                <Cell key={idx} fill={seriesColor(idx)} />
+              ))}
+            </Bar>
+          </BarChart>
         </ResponsiveContainer>
       )}
     </ChartPanel>

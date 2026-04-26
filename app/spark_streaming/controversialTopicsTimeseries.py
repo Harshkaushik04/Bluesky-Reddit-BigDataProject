@@ -3,12 +3,12 @@ from pyspark.sql.functions import (
     array_distinct,
     avg,
     col,
-    date_trunc,
     explode,
     lit,
     lower,
     split,
     to_timestamp,
+    window,
     when,
 )
 
@@ -38,10 +38,14 @@ def main():
         )
         .filter((col("like_to_comment_ratio") != 0) & (col("replyCount") >= 50))
         .withColumn("timestamp", to_timestamp(col("indexedAt")))
-        .withColumn("time_bucket", date_trunc("hour", col("timestamp")))
         .withColumn("topic_name", explode(array_distinct(split(lower(col("record.text")), r"\s+"))))
-        .groupBy("time_bucket", "topic_name")
+        .groupBy(window(col("timestamp"), "10 minutes").alias("time_window"), "topic_name")
         .agg(avg(col("like_to_comment_ratio")).alias("average_like_to_comment_ratio"))
+        .select(
+            col("time_window.start").alias("time_bucket"),
+            col("topic_name"),
+            col("average_like_to_comment_ratio"),
+        )
     )
 
     query = (

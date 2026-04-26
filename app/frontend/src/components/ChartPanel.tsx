@@ -7,9 +7,10 @@ export function ChartPanel({ title, error, loading, children }: Props) {
     <section className="panel">
       <div className="panel-header">
         <h3>{title}</h3>
+        <span className="panel-badge">Live</span>
       </div>
       {loading ? (
-        <p>Loading...</p>
+        <p className="muted">Loading...</p>
       ) : error ? (
         <p className="error">{error}</p>
       ) : (
