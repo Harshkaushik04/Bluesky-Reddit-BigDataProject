@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from collections import defaultdict
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
@@ -18,6 +19,11 @@ MODEL_PATH = os.getenv(
     "LLM_MODEL_PATH",
     "D:/Bluesky-Reddit-BigDataProject/models/gemma-4-E4B-it-Q4_K_M.gguf",
 )
+ALLOW_SENTIMENT_FALLBACK = os.getenv("ALLOW_SENTIMENT_FALLBACK", "false").lower() in {
+    "1",
+    "true",
+    "yes",
+}
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 app = FastAPI(title="Bluesky Reddit Dashboard API")
@@ -31,6 +37,7 @@ app.add_middleware(
 )
 
 _llm_instance = None
+_llm_load_error: str | None = None
 
 
 def to_iso(dt: datetime) -> str:
@@ -76,15 +83,23 @@ class TopCrossTopicsRequest(BaseModel):
 
 
 def get_llm():
-    global _llm_instance
+    global _llm_instance, _llm_load_error
     if _llm_instance is not None:
         return _llm_instance
+    if _llm_load_error:
+        return None
     try:
+        model_file = Path(MODEL_PATH)
+        if not model_file.exists():
+            _llm_load_error = f"Model file not found at {MODEL_PATH}"
+            return None
         from llama_cpp import Llama  # type: ignore
 
         _llm_instance = Llama(model_path=MODEL_PATH, n_ctx=2048, verbose=False)
+        _llm_load_error = None
         return _llm_instance
-    except Exception:
+    except Exception as exc:
+        _llm_load_error = f"{type(exc).__name__}: {exc}"
         return None
 
 
@@ -196,6 +211,7 @@ def popular_words_by_time(payload: PopularWordsRequest) -> dict[str, Any]:
 
 
 @app.post("/wordPopularityTimeline")
+@app.post("/getWordPopularityTimeline")
 def word_popularity_timeline(payload: WordPopularityRequest) -> dict[str, Any]:
     stmt = text(
         """
@@ -250,6 +266,11 @@ def action_recommend(payload: ActionRecommendRequest) -> dict[str, str]:
 
     llm = get_llm()
     if llm is None:
+        if not ALLOW_SENTIMENT_FALLBACK:
+            detail = "LLM is unavailable for action recommendation."
+            if _llm_load_error:
+                detail = f"{detail} Loader error: {_llm_load_error}"
+            raise HTTPException(status_code=503, detail=detail)
         avg_score = sum(sentiment_map.get(w, 0.0) for w in words) / max(len(words), 1)
         fallback = (
             "Recommendation: Post - overall sentiment is positive."
@@ -261,6 +282,17 @@ def action_recommend(payload: ActionRecommendRequest) -> dict[str, str]:
     output = llm(prompt, max_tokens=80, temperature=0.2)
     text_out = output["choices"][0]["text"].strip()
     return {"response": text_out}
+
+
+@app.get("/llmStatus")
+def llm_status() -> dict[str, Any]:
+    llm = get_llm()
+    return {
+        "loaded": llm is not None,
+        "model_path": MODEL_PATH,
+        "allow_fallback": ALLOW_SENTIMENT_FALLBACK,
+        "error": _llm_load_error,
+    }
 
 
 @app.post("/getControversialTopics")

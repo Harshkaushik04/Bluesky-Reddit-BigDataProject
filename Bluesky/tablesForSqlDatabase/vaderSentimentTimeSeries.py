@@ -36,7 +36,7 @@ df = df.withColumn("exploded_text", explode(col("splitted_text")))
 # Group by word and 2-hour time window, calculate average sentiment and word count
 df = df.groupBy(
     col("exploded_text").alias("word"),
-    window(col("timestamp"), "2 hours").alias("time_window") # Aliased as time_window temporarily
+    window(col("timestamp"), "10 minutes").alias("time_window") # Aliased as time_window temporarily
 ).agg(
     avg(col("vader_sentiment_score")).alias("avg_vader_sentiment_score"),
     count("*").alias("word_count")

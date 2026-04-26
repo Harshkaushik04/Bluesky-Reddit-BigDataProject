@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 export function usePolling<T>(
   fetcher: () => Promise<T>,
   deps: unknown[],
-  intervalMs = 10_000,
+  intervalMs = 60_000,
 ) {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState<boolean>(true);

@@ -17,7 +17,7 @@ firehose_df = spark.read.format("parquet") \
 # Firehose DOES use time_us, so this stays exactly the same
 firehose_df = firehose_df.withColumn("timestamp", timestamp_micros(col("time_us")))
 
-firehose_counts = firehose_df.groupBy(window(col("timestamp"), "2 hours").alias("time_window")) \
+firehose_counts = firehose_df.groupBy(window(col("timestamp"), "10 minutes").alias("time_window")) \
     .count() \
     .withColumn("source_type", lit("firehose")) \
     .select(col("time_window.start").alias("time_bucket"), "source_type", col("count").alias("record_count"))
@@ -29,7 +29,7 @@ getPosts_df = spark.read.format("json") \
 # FIXED: getPosts uses record.createdAt, NOT time_us
 getPosts_df = getPosts_df.withColumn("timestamp", to_timestamp(col("record.createdAt")))
 
-getPosts_counts = getPosts_df.groupBy(window(col("timestamp"), "2 hours").alias("time_window")) \
+getPosts_counts = getPosts_df.groupBy(window(col("timestamp"), "10 minutes").alias("time_window")) \
     .count() \
     .withColumn("source_type", lit("getPosts_endpoint")) \
     .select(col("time_window.start").alias("time_bucket"), "source_type", col("count").alias("record_count"))
