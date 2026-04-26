@@ -1,0 +1,4 @@
+uvicorn reddit.src.main_api:app --reload --port 8000
+
+open
+http://localhost:8000
