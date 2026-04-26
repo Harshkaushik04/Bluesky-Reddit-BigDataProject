@@ -1,5 +1,14 @@
 import { useState } from "react";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+  Cell,
+} from "recharts";
 import { postApi } from "../api";
 import { usePolling } from "../hooks";
 import { ChartPanel } from "../components/ChartPanel";
@@ -14,6 +23,7 @@ export function CrossLinksPage() {
   );
 
   const points = Object.entries(data?.topics ?? {}).map(([topic, num]) => ({ topic, num }));
+  const barPalette = ["#0ea5ff", "#1ec8ff", "#49b6ff", "#69ddff", "#2389ff", "#83f2ff"];
 
   return (
     <ChartPanel title="Posts with Reddit links vs Topic" loading={loading} error={error}>
@@ -24,12 +34,16 @@ export function CrossLinksPage() {
         </label>
       </div>
       <ResponsiveContainer width="100%" height={420}>
-        <BarChart data={points}>
+        <BarChart data={points} layout="vertical" margin={{ left: 24 }}>
           <CartesianGrid stroke="#1f3b67" />
-          <XAxis dataKey="topic" stroke="#8cc7ff" tick={{ fontSize: 10 }} />
-          <YAxis stroke="#8cc7ff" />
+          <XAxis type="number" stroke="#8cc7ff" />
+          <YAxis type="category" dataKey="topic" stroke="#8cc7ff" tick={{ fontSize: 11 }} width={140} />
           <Tooltip />
-          <Bar dataKey="num" fill="#1d7cff" />
+          <Bar dataKey="num" radius={[0, 8, 8, 0]}>
+            {points.map((_, idx) => (
+              <Cell key={idx} fill={barPalette[idx % barPalette.length]} />
+            ))}
+          </Bar>
         </BarChart>
       </ResponsiveContainer>
     </ChartPanel>

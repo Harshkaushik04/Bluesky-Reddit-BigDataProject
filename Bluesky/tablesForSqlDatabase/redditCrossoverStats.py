@@ -26,7 +26,7 @@ reddit_topics_df = reddit_mentions_df.withColumn(
 
 # 5. Group by 2-Hour Time Bucket and Topic
 reddit_stats_df = reddit_topics_df.filter(~col("topic_name").contains("reddit.com")) \
-    .groupBy(window(col("timestamp"), "2 hours").alias("time_window"), "topic_name") \
+    .groupBy(window(col("timestamp"), "10 minutes").alias("time_window"), "topic_name") \
     .count() \
     .select(
         "topic_name", 
