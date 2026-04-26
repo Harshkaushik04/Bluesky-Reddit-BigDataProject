@@ -15,4 +15,5 @@ qdrant
 qdrant/
 pycache/
 models/
+__pycache__/
 
