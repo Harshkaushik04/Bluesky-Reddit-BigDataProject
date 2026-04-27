@@ -1,7 +1,7 @@
 from pathlib import Path
 from pyspark.sql import SparkSession
 
-BASE_DIR = Path("D:/Bluesky-Reddit-BigDataProject")
+BASE_DIR = Path("/mnt/d/Bluesky-Reddit-BigDataProject")
 DATA_DIR = BASE_DIR / "Bluesky_data"
 GOLD_DIR = DATA_DIR / "gold"
 CHECKPOINT_DIR = DATA_DIR / "checkpoints"
@@ -17,9 +17,12 @@ POSTGRES_PROPERTIES = {
 def build_spark(app_name: str) -> SparkSession:
     return (
         SparkSession.builder.appName(app_name)
-        .master("local[4]")
-        .config("spark.sql.shuffle.partitions", "8")
+        .master("local[2]")
+        .config("spark.driver.memory", "1g")
+        .config("spark.executor.memory", "1g")
+        .config("spark.sql.shuffle.partitions", "4")
         .config("spark.sql.caseSensitive", "true")
+        .config("spark.sql.streaming.schemaInference", "true")
+        .config("spark.jars.packages", "org.postgresql:postgresql:42.6.0")
         .getOrCreate()
     )
-

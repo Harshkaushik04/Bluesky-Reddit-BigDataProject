@@ -6,7 +6,9 @@
     "firehose": "ts-node firehose.ts"
   },
   "dependencies": {
-    "ws": "^8.18.3"
+    "@types/ws": "^8.18.1",
+    "repomix": "^1.14.0",
+    "ws": "^8.20.0"
   },
   "devDependencies": {
     "@types/node": "^24.9.1",

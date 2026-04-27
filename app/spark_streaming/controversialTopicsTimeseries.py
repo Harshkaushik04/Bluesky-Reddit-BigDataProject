@@ -3,6 +3,7 @@ from pyspark.sql.functions import (
     array_distinct,
     avg,
     col,
+    coalesce,
     explode,
     lit,
     lower,
@@ -27,7 +28,7 @@ def write_batch(batch_df, _batch_id: int):
 def main():
     spark = build_spark("StructuredStreaming_ControversialTopics")
     stream = spark.readStream.format("json").load(
-        "D:/Bluesky-Reddit-BigDataProject/Bluesky_data/streaming/getposts"
+        "/mnt/d/Bluesky-Reddit-BigDataProject/Bluesky_data/silver/getposts"
     )
 
     transformed = (
@@ -38,7 +39,7 @@ def main():
         )
         .filter((col("like_to_comment_ratio") != 0) & (col("replyCount") >= 50))
         .withColumn("timestamp", to_timestamp(col("indexedAt")))
-        .withColumn("topic_name", explode(array_distinct(split(lower(col("record.text")), r"\s+"))))
+        .withColumn("topic_name", explode(array_distinct(split(lower(coalesce(col("record.text"), lit(""))), r"\s+"))))
         .groupBy(window(col("timestamp"), "10 minutes").alias("time_window"), "topic_name")
         .agg(avg(col("like_to_comment_ratio")).alias("average_like_to_comment_ratio"))
         .select(
@@ -59,4 +60,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

@@ -2,8 +2,8 @@ import { WebSocket } from "ws";
 import * as fs from "fs";
 import * as path from "path";
 
-const BRONZE_DIR = "D:\\Bluesky-Reddit-BigDataProject\\Bluesky_data\\initial_firehose";
-const STREAMING_DIR = "D:\\Bluesky-Reddit-BigDataProject\\Bluesky_data\\streaming\\firehose";
+const BRONZE_DIR = "/mnt/d/Bluesky-Reddit-BigDataProject/Bluesky_data/initial_firehose";
+const STREAMING_DIR = "mnt/d/Bluesky-Reddit-BigDataProject/Bluesky_data/streaming/firehose";
 
 [BRONZE_DIR, STREAMING_DIR].forEach((dir) => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });

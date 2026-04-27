@@ -29,7 +29,7 @@ def main():
 
     firehose_stream = (
         spark.readStream.format("json")
-        .load("D:/Bluesky-Reddit-BigDataProject/Bluesky_data/streaming/firehose")
+        .load("/mnt/d/Bluesky-Reddit-BigDataProject/Bluesky_data/streaming/firehose")
         .withColumn(
             "tokens",
             split(
@@ -49,7 +49,7 @@ def main():
 
     getposts_stream = (
         spark.readStream.format("json")
-        .load("D:/Bluesky-Reddit-BigDataProject/Bluesky_data/streaming/getposts")
+        .load("/mnt/d/Bluesky-Reddit-BigDataProject/Bluesky_data/streaming/getposts")
         .withColumn(
             "tokens",
             split(
@@ -80,4 +80,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
