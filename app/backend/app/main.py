@@ -17,7 +17,7 @@ DATABASE_URL = os.getenv(
 )
 MODEL_PATH = os.getenv(
     "LLM_MODEL_PATH",
-    "D:/Bluesky-Reddit-BigDataProject/models/gemma-4-E4B-it-Q4_K_M.gguf",
+    "/home/harsh/models/gemma-4-E4B-it-Q4_K_M.gguf",
 )
 ALLOW_SENTIMENT_FALLBACK = os.getenv("ALLOW_SENTIMENT_FALLBACK", "false").lower() in {
     "1",
@@ -95,7 +95,8 @@ def get_llm():
             return None
         from llama_cpp import Llama  # type: ignore
 
-        _llm_instance = Llama(model_path=MODEL_PATH, n_ctx=2048, verbose=False)
+        _llm_instance = Llama(model_path=MODEL_PATH, n_ctx=2048,n_gpu_layers=-1, 
+            verbose=True )
         _llm_load_error = None
         return _llm_instance
     except Exception as exc:
@@ -233,8 +234,6 @@ def word_popularity_timeline(payload: WordPopularityRequest) -> dict[str, Any]:
             },
         ).fetchall()
     return {"popularity": [{to_iso(r.time_range): int(r.word_count)} for r in rows]}
-
-
 @app.post("/actionRecommend")
 def action_recommend(payload: ActionRecommendRequest) -> dict[str, str]:
     words = [w.strip(".,!?;:()[]{}\"'").lower() for w in payload.sentence.split() if w.strip()]
@@ -253,15 +252,19 @@ def action_recommend(payload: ActionRecommendRequest) -> dict[str, str]:
         rows = conn.execute(stmt, {"words": words}).fetchall()
     sentiment_map = {r.word: float(r.avg_vader_sentiment_score) for r in rows}
 
-    sentiment_lines = [f"{w}: {sentiment_map.get(w, 0.0):.4f}" for w in words]
-    prompt = (
-        "You are a social-media posting assistant.\n"
-        "Given this sentence and word-level sentiment signals, answer in one short line "
-        "whether the user should post this sentence on Bluesky.\n\n"
-        f"Sentence: {payload.sentence}\n"
-        "Word sentiments:\n"
+    sentiment_lines = [f"- {w}: {sentiment_map.get(w, 0.0):.4f}" for w in words]
+    
+    # 1. Improved prompt: Explain the math and set strict rules
+    user_prompt = (
+        "You are a social-media posting assistant. Decide if the user should post this sentence on Bluesky based on the provided VADER sentiment scores.\n\n"
+        "Rules:\n"
+        "1. Scores range from -1.0 (highly negative) to 1.0 (highly positive). A score of 0.0 means neutral.\n"
+        "2. If the sentence is mostly positive or neutral, you MUST recommend 'Post'.\n"
+        "3. Only recommend 'Do not post' if there are significantly negative scores (< 0.0).\n\n"
+        f"Sentence: '{payload.sentence}'\n\n"
+        "Word Sentiments:\n"
         + "\n".join(sentiment_lines)
-        + "\n\nFormat: Recommendation: <Post/Do not post> - <short reason>"
+        + "\n\nAnswer in exactly one short line using this format:\nRecommendation: <Post/Do not post> - <short reason>"
     )
 
     llm = get_llm()
@@ -273,17 +276,20 @@ def action_recommend(payload: ActionRecommendRequest) -> dict[str, str]:
             raise HTTPException(status_code=503, detail=detail)
         avg_score = sum(sentiment_map.get(w, 0.0) for w in words) / max(len(words), 1)
         fallback = (
-            "Recommendation: Post - overall sentiment is positive."
+            "Recommendation: Post - overall sentiment is positive or neutral."
             if avg_score >= 0
             else "Recommendation: Do not post - overall sentiment trends negative."
         )
         return {"response": fallback}
 
-    output = llm(prompt, max_tokens=80, temperature=0.2)
-    text_out = output["choices"][0]["text"].strip()
+    # 2. Use Chat Completion API instead of base autocomplete
+    output = llm.create_chat_completion(
+        messages=[{"role": "user", "content": user_prompt}],
+        max_tokens=80,
+        temperature=0.1  # Lowered temperature so the AI uses logic instead of creativity
+    )
+    text_out = output["choices"][0]["message"]["content"].strip()
     return {"response": text_out}
-
-
 @app.get("/llmStatus")
 def llm_status() -> dict[str, Any]:
     llm = get_llm()

@@ -1,6 +1,18 @@
 from pyspark.sql.functions import col, lit, to_timestamp, window
+from pyspark.sql.functions import array, array_except, coalesce, expr, lower, regexp_replace, size, split
+from pyspark.ml.feature import StopWordsRemover
 
 from common import CHECKPOINT_DIR, GOLD_DIR, POSTGRES_JDBC_URL, POSTGRES_PROPERTIES, build_spark
+
+DEFAULT_STOPWORDS = set(StopWordsRemover.loadDefaultStopWords("english"))
+CUSTOM_STOPWORDS = {
+    "rt", "amp", "via", "http", "https", "www", "com", "org", "net", "co",
+    "im", "ive", "dont", "didnt", "doesnt", "cant", "couldnt", "wouldnt",
+    "shouldnt", "youre", "theyre", "weve", "thats", "its", "u", "ur", "ya",
+    "lol", "lmao", "omg", "idk", "btw", "thx", "pls", "okay", "ok", "one",
+}
+ALL_STOPWORDS = sorted(DEFAULT_STOPWORDS.union(CUSTOM_STOPWORDS))
+STOPWORDS_ARRAY = array(*[lit(w) for w in ALL_STOPWORDS])
 
 
 def write_batch(batch_df, _batch_id: int):
@@ -18,6 +30,16 @@ def main():
     firehose_stream = (
         spark.readStream.format("json")
         .load("D:/Bluesky-Reddit-BigDataProject/Bluesky_data/streaming/firehose")
+        .withColumn(
+            "tokens",
+            split(
+                lower(regexp_replace(coalesce(col("commit.record.text"), lit("")), r"[^a-zA-Z0-9\s]", " ")),
+                r"\s+",
+            ),
+        )
+        .withColumn("tokens", array_except(col("tokens"), STOPWORDS_ARRAY))
+        .withColumn("tokens", expr("filter(tokens, x -> x rlike '^[a-z][a-z0-9]{1,}$')"))
+        .filter(size(col("tokens")) > 0)
         .withColumn("timestamp", to_timestamp(col("commit.record.createdAt")))
         .groupBy(window(col("timestamp"), "10 minutes").alias("time_window"))
         .count()
@@ -28,6 +50,16 @@ def main():
     getposts_stream = (
         spark.readStream.format("json")
         .load("D:/Bluesky-Reddit-BigDataProject/Bluesky_data/streaming/getposts")
+        .withColumn(
+            "tokens",
+            split(
+                lower(regexp_replace(coalesce(col("record.text"), lit("")), r"[^a-zA-Z0-9\s]", " ")),
+                r"\s+",
+            ),
+        )
+        .withColumn("tokens", array_except(col("tokens"), STOPWORDS_ARRAY))
+        .withColumn("tokens", expr("filter(tokens, x -> x rlike '^[a-z][a-z0-9]{1,}$')"))
+        .filter(size(col("tokens")) > 0)
         .withColumn("timestamp", to_timestamp(col("record.createdAt")))
         .groupBy(window(col("timestamp"), "10 minutes").alias("time_window"))
         .count()
