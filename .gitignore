@@ -16,4 +16,6 @@ qdrant/
 pycache/
 models/
 __pycache__/
+backend/reddit_dashboard.db
+*.db
 
