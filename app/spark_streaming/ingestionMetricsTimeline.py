@@ -1,82 +1,44 @@
-from pyspark.sql.functions import col, lit, to_timestamp, window
-from pyspark.sql.functions import array, array_except, coalesce, expr, lower, regexp_replace, size, split
-from pyspark.ml.feature import StopWordsRemover
+from pyspark.sql.functions import (
+    array_distinct, col, coalesce, count, explode, lit, lower, split, to_timestamp, window
+)
 
 from common import CHECKPOINT_DIR, GOLD_DIR, POSTGRES_JDBC_URL, POSTGRES_PROPERTIES, build_spark
-
-DEFAULT_STOPWORDS = set(StopWordsRemover.loadDefaultStopWords("english"))
-CUSTOM_STOPWORDS = {
-    "rt", "amp", "via", "http", "https", "www", "com", "org", "net", "co",
-    "im", "ive", "dont", "didnt", "doesnt", "cant", "couldnt", "wouldnt",
-    "shouldnt", "youre", "theyre", "weve", "thats", "its", "u", "ur", "ya",
-    "lol", "lmao", "omg", "idk", "btw", "thx", "pls", "okay", "ok", "one",
-}
-ALL_STOPWORDS = sorted(DEFAULT_STOPWORDS.union(CUSTOM_STOPWORDS))
-STOPWORDS_ARRAY = array(*[lit(w) for w in ALL_STOPWORDS])
-
 
 def write_batch(batch_df, _batch_id: int):
     if batch_df.isEmpty():
         return
-    batch_df.write.mode("append").parquet(str(GOLD_DIR / "ingestion_metrics_timeline"))
+    batch_df.write.mode("append").parquet(str(GOLD_DIR / "reddit_crossover_stats"))
     batch_df.write.mode("append").jdbc(
-        POSTGRES_JDBC_URL, "ingestion_metrics_timeline", properties=POSTGRES_PROPERTIES
+        POSTGRES_JDBC_URL, "reddit_crossover_stats", properties=POSTGRES_PROPERTIES
     )
-
 
 def main():
-    spark = build_spark("StructuredStreaming_IngestionMetrics")
-
-    firehose_stream = (
-        spark.readStream.format("json")
-        .load("/mnt/d/Bluesky-Reddit-BigDataProject/Bluesky_data/streaming/firehose")
-        .withColumn(
-            "tokens",
-            split(
-                lower(regexp_replace(coalesce(col("commit.record.text"), lit("")), r"[^a-zA-Z0-9\s]", " ")),
-                r"\s+",
-            ),
-        )
-        .withColumn("tokens", array_except(col("tokens"), STOPWORDS_ARRAY))
-        .withColumn("tokens", expr("filter(tokens, x -> x rlike '^[a-z][a-z0-9]{1,}$')"))
-        .filter(size(col("tokens")) > 0)
-        .withColumn("timestamp", to_timestamp(col("commit.record.createdAt")))
-        .groupBy(window(col("timestamp"), "10 minutes").alias("time_window"))
-        .count()
-        .withColumn("source_type", lit("firehose"))
-        .select(col("time_window.start").alias("time_bucket"), "source_type", col("count").alias("record_count"))
-    )
-
-    getposts_stream = (
+    spark = build_spark("StructuredStreaming_RedditCrossover")
+    stream = (
         spark.readStream.format("json")
         .load("/mnt/d/Bluesky-Reddit-BigDataProject/Bluesky_data/streaming/getposts")
-        .withColumn(
-            "tokens",
-            split(
-                lower(regexp_replace(coalesce(col("record.text"), lit("")), r"[^a-zA-Z0-9\s]", " ")),
-                r"\s+",
-            ),
-        )
-        .withColumn("tokens", array_except(col("tokens"), STOPWORDS_ARRAY))
-        .withColumn("tokens", expr("filter(tokens, x -> x rlike '^[a-z][a-z0-9]{1,}$')"))
-        .filter(size(col("tokens")) > 0)
-        .withColumn("timestamp", to_timestamp(col("record.createdAt")))
-        .groupBy(window(col("timestamp"), "10 minutes").alias("time_window"))
-        .count()
-        .withColumn("source_type", lit("getPosts_endpoint"))
-        .select(col("time_window.start").alias("time_bucket"), "source_type", col("count").alias("record_count"))
     )
 
-    unified = firehose_stream.unionByName(getposts_stream, allowMissingColumns=True)
+    transformed = (
+        stream.withColumn("timestamp", to_timestamp(col("record.createdAt")))
+        # Create a clean text column once
+        .withColumn("text_clean", lower(coalesce(col("record.text"), lit(""))))
+        # Filter on the clean column instead of recreating it
+        .filter(col("text_clean").contains("reddit.com"))
+        .withColumn("topic_name", explode(array_distinct(split(col("text_clean"), r"\s+"))))
+        .filter((col("topic_name") != "") & (~col("topic_name").contains("reddit.com")))
+        .groupBy(window(col("timestamp"), "10 minutes").alias("time_window"), "topic_name")
+        .agg(count("*").alias("reddit_link_count"))
+        .select("topic_name", col("time_window.start").alias("time_bucket"), "reddit_link_count")
+    )
 
     query = (
-        unified.writeStream.outputMode("update")
-        .option("checkpointLocation", str(CHECKPOINT_DIR / "ingestion_metrics_timeline"))
+        transformed.writeStream.outputMode("update")
+        .option("checkpointLocation", str(CHECKPOINT_DIR / "reddit_crossover_stats"))
         .foreachBatch(write_batch)
         .start()
     )
     query.awaitTermination()
-
 
 if __name__ == "__main__":
     main()

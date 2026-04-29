@@ -15,7 +15,6 @@ from pyspark.sql.functions import (
 
 from common import CHECKPOINT_DIR, GOLD_DIR, POSTGRES_JDBC_URL, POSTGRES_PROPERTIES, build_spark
 
-
 def write_batch(batch_df, _batch_id: int):
     if batch_df.isEmpty():
         return
@@ -24,11 +23,13 @@ def write_batch(batch_df, _batch_id: int):
         POSTGRES_JDBC_URL, "controversial_topics_timeline", properties=POSTGRES_PROPERTIES
     )
 
-
 def main():
     spark = build_spark("StructuredStreaming_ControversialTopics")
-    stream = spark.readStream.format("json").load(
-        "/mnt/d/Bluesky-Reddit-BigDataProject/Bluesky_data/silver/getposts"
+    
+    # Updated to read from raw streaming output instead of silver
+    stream = (
+        spark.readStream.format("json")
+        .load("/mnt/d/Bluesky-Reddit-BigDataProject/Bluesky_data/streaming/getposts")
     )
 
     transformed = (
@@ -39,7 +40,11 @@ def main():
         )
         .filter((col("like_to_comment_ratio") != 0) & (col("replyCount") >= 50))
         .withColumn("timestamp", to_timestamp(col("indexedAt")))
-        .withColumn("topic_name", explode(array_distinct(split(lower(coalesce(col("record.text"), lit(""))), r"\s+"))))
+        # Create a clean text column before exploding to save computation
+        .withColumn("text_clean", lower(coalesce(col("record.text"), lit(""))))
+        .filter(col("text_clean") != "")
+        .withColumn("topic_name", explode(array_distinct(split(col("text_clean"), r"\s+"))))
+        .filter(col("topic_name") != "")
         .groupBy(window(col("timestamp"), "10 minutes").alias("time_window"), "topic_name")
         .agg(avg(col("like_to_comment_ratio")).alias("average_like_to_comment_ratio"))
         .select(
@@ -56,7 +61,6 @@ def main():
         .start()
     )
     query.awaitTermination()
-
 
 if __name__ == "__main__":
     main()
