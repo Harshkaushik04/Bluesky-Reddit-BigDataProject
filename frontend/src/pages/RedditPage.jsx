@@ -251,9 +251,8 @@ export default function RedditPage() {
               className="sidebar-toggle"
               aria-label={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
               onClick={() => setSidebarOpen((v) => !v)}
-              style={{ marginBottom: "10px" }}
             >
-              <span className="burger" aria-hidden="true">
+              <span className="dots" aria-hidden="true">
                 <span />
                 <span />
                 <span />
@@ -724,7 +723,7 @@ export default function RedditPage() {
                               key={topic}
                               style={{
                                 display: "grid",
-                                gridTemplateColumns: "150px 1fr 70px",
+                                gridTemplateColumns: "150px 1fr",
                                 gap: "12px",
                                 alignItems: "center"
                               }}
@@ -754,9 +753,6 @@ export default function RedditPage() {
                                   hidePeriodLabel
                                   hideRange
                                 />
-                              </div>
-                              <div style={{ color: "#cdd5e7", fontSize: "0.9rem", textAlign: "right" }}>
-                                {row.status}
                               </div>
                             </div>
                           );

@@ -70,6 +70,9 @@ STOPWORDS = [
     "would",
     "you",
     "your",
+    "says",
+    "new",
+    "over",
 ]
 
 

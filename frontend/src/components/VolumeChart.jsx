@@ -34,7 +34,15 @@ export default function VolumeChart({
   labelC,
   keyA,
   keyB,
-  keyC
+  keyC,
+  legendColorA,
+  legendColorB,
+  legendColorC,
+  height = 165,
+  wrapHeight,
+  hideLegend,
+  hidePeriodLabel,
+  hideRange
 }) {
   const svgRef = useRef(null);
   const [tooltip, setTooltip] = useState(null);
@@ -42,12 +50,11 @@ export default function VolumeChart({
   const chart = useMemo(() => {
     const safeSeries = series || [];
     const width = 760;
-    const height = 165;
     const padding = { top: 8, right: 20, bottom: 18, left: 20 };
     const plotW = width - padding.left - padding.right;
     const plotH = height - padding.top - padding.bottom;
 
-    const maxValue = Math.max(1, ...safeSeries.map((d) => Math.max(d[keyA] || 0, d[keyB] || 0, d[keyC] || 0)));
+    const maxValue = Math.max(1, ...safeSeries.map((d) => Math.max(Number(d[keyA] || 0), Number(d[keyB] || 0), Number(d[keyC] || 0))));
     const n = safeSeries.length;
     const xStep = n > 1 ? plotW / (n - 1) : plotW;
 
@@ -88,17 +95,17 @@ export default function VolumeChart({
       svg: `
         <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-label="Volume chart">
           ${grid}
-          <path d="${buildAreaPath(cPts, baseY)}" fill="${colorC.area}"></path>
-          <path d="${buildAreaPath(bPts, baseY)}" fill="${colorB.area}"></path>
-          <path d="${buildAreaPath(aPts, baseY)}" fill="${colorA.area}"></path>
-          <path d="${buildLinePath(cPts)}" fill="none" stroke="${colorC.line}" stroke-width="1.8"></path>
-          <path d="${buildLinePath(bPts)}" fill="none" stroke="${colorB.line}" stroke-width="1.8"></path>
-          <path d="${buildLinePath(aPts)}" fill="none" stroke="${colorA.line}" stroke-width="1.8"></path>
+          <path d="${buildAreaPath(cPts, baseY)}" fill="${colorC?.area || 'transparent'}"></path>
+          <path d="${buildAreaPath(bPts, baseY)}" fill="${colorB?.area || 'transparent'}"></path>
+          <path d="${buildAreaPath(aPts, baseY)}" fill="${colorA?.area || 'transparent'}"></path>
+          <path d="${buildLinePath(cPts)}" fill="none" stroke="${colorC?.line || 'transparent'}" stroke-width="1.8"></path>
+          <path d="${buildLinePath(bPts)}" fill="none" stroke="${colorB?.line || 'transparent'}" stroke-width="1.8"></path>
+          <path d="${buildLinePath(aPts)}" fill="none" stroke="${colorA?.line || 'transparent'}" stroke-width="1.8"></path>
           ${xTicks}
         </svg>
       `
     };
-  }, [series, modeLabel, keyA, keyB, keyC, colorA, colorB, colorC]);
+  }, [series, modeLabel, keyA, keyB, keyC, colorA, colorB, colorC, height]);
 
   const onMove = (event) => {
     if (!svgRef.current || !series || series.length === 0) return;
@@ -114,7 +121,7 @@ export default function VolumeChart({
       a: point[keyA],
       b: point[keyB],
       c: point[keyC],
-      total: point.total
+      total: point.total || Number(point[keyA] || 0) + Number(point[keyB] || 0) + Number(point[keyC] || 0)
     });
   };
 
@@ -122,51 +129,76 @@ export default function VolumeChart({
 
   return (
     <>
-      <div className="volume-legend">
-        <span className="legend-item legend-posts">{labelA}</span>
-        <span className="legend-item legend-likes">{labelB}</span>
-        <span className="legend-item legend-follows">{labelC}</span>
-      </div>
+      {!hideLegend && (
+        <div className="volume-legend">
+          {labelA && (
+            <span className="legend-item" style={{ "--dot-color": legendColorA || colorA?.line || "var(--accent)" }}>
+              {labelA}
+            </span>
+          )}
+          {labelB && (
+            <span className="legend-item" style={{ "--dot-color": legendColorB || colorB?.line || "var(--accent)" }}>
+              {labelB}
+            </span>
+          )}
+          {labelC && (
+            <span className="legend-item" style={{ "--dot-color": legendColorC || colorC?.line || "var(--accent)" }}>
+              {labelC}
+            </span>
+          )}
+        </div>
+      )}
 
-      <p className="volume-period-label">Period: {modeLabel === "overall" ? "overall years" : modeLabel}</p>
+      {!hidePeriodLabel && (
+        <p className="volume-period-label">Period: {modeLabel === "overall" ? "overall years" : modeLabel}</p>
+      )}
 
-      <div className="volume-chart-wrap">
+      <div className="volume-chart-wrap" style={wrapHeight ? { height: wrapHeight } : {}}>
         <div
           ref={svgRef}
           onMouseMove={onMove}
           onMouseEnter={onMove}
           onMouseLeave={onLeave}
           dangerouslySetInnerHTML={{ __html: chart.svg }}
+          style={{ width: "100%", height: "100%" }}
         />
         {tooltip ? (
           <div className="chart-tooltip" style={{ left: tooltip.x, top: tooltip.y }}>
             <div>
               <strong>{tooltip.bucket}</strong>
             </div>
-            <div>
-              {labelA}: {formatNumber(tooltip.a)}
-            </div>
-            <div>
-              {labelB}: {formatNumber(tooltip.b)}
-            </div>
-            <div>
-              {labelC}: {formatNumber(tooltip.c)}
-            </div>
+            {labelA && (
+              <div>
+                {labelA}: {formatNumber(tooltip.a)}
+              </div>
+            )}
+            {labelB && (
+              <div>
+                {labelB}: {formatNumber(tooltip.b)}
+              </div>
+            )}
+            {labelC && (
+              <div>
+                {labelC}: {formatNumber(tooltip.c)}
+              </div>
+            )}
             <div>Total: {formatNumber(tooltip.total)}</div>
           </div>
         ) : null}
       </div>
 
-      {series && series.length ? (
-        <div className="volume-range">
-          <span id={startLabelId}>Start: {series[0].bucket}</span>
-          <span id={endLabelId}>End: {series[series.length - 1].bucket}</span>
-        </div>
-      ) : (
-        <div className="volume-range">
-          <span id={startLabelId}>Start: -</span>
-          <span id={endLabelId}>End: -</span>
-        </div>
+      {!hideRange && (
+        series && series.length ? (
+          <div className="volume-range">
+            <span id={startLabelId}>Start: {series[0].bucket}</span>
+            <span id={endLabelId}>End: {series[series.length - 1].bucket}</span>
+          </div>
+        ) : (
+          <div className="volume-range">
+            <span id={startLabelId}>Start: -</span>
+            <span id={endLabelId}>End: -</span>
+          </div>
+        )
       )}
     </>
   );

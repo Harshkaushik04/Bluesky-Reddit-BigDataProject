@@ -104,6 +104,9 @@ STOPWORDS = {
     "would",
     "you",
     "your",
+    "says",
+    "new",
+    "over",
 }
 
 app = FastAPI(title="Reddit Dashboard API", version="0.3.0")
