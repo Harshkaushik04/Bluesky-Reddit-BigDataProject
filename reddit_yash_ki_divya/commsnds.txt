@@ -1,7 +1,0 @@
-python backend/spark_reddit_metrics.py (to compute for historic data)
-
-start api
-uvicorn backend.main:app --reload
-
-
-open frontend 

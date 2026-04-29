@@ -1,0 +1,23 @@
+cd backend
+python spark_reddit_metrics.py
+uvicorn main:app --reload
+
+
+cd frontend
+npm run dev
+
+
+----------------------------------------------------
+cd reddit_yash_ki_divya
+python comments_post_producer.py
+
+
+cd backend
+python spark_reddit_metrics.py
+
+
+cd backend
+uvicorn main:app --reload
+
+cd frontend
+npm run dev

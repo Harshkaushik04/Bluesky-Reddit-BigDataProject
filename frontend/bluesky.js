@@ -248,7 +248,7 @@ async function loadBlueskyDashboard() {
       "scan-info",
       `Scanned ${formatNumber(data.meta?.records_scanned || 0)} events from Bluesky firehose files.`
     );
-    setText("data-mode-tag", "Mode: without streaming");
+    setText("data-mode-tag", "Mode: Real-time");
   } catch (error) {
     setText("scan-info", "Could not connect to backend or no Bluesky data found.");
     console.error("Failed to load Bluesky dashboard:", error);

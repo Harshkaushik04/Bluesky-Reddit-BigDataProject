@@ -58,16 +58,26 @@ export default function RedditPage() {
     setError(null);
     setLoadingPosts(true);
 
-    fetchJson(apiUrl)
-      .then((postsJson) => {
-        if (!mounted) return;
-        setData(postsJson);
-      })
-      .catch((e) => mounted && setError((prev) => prev || e.message || "Failed to load posts data"))
-      .finally(() => mounted && setLoadingPosts(false));
+    const fetchData = () => {
+      fetchJson(apiUrl)
+        .then((postsJson) => {
+          if (!mounted) return;
+          setData(postsJson);
+        })
+        .catch((e) => {
+          if (mounted) setError((prev) => prev || e.message || "Failed to load posts data");
+        })
+        .finally(() => {
+          if (mounted) setLoadingPosts(false);
+        });
+    };
+
+    fetchData();
+    const interval = setInterval(fetchData, 60000);
 
     return () => {
       mounted = false;
+      clearInterval(interval);
     };
   }, [apiUrl]);
 
@@ -75,18 +85,28 @@ export default function RedditPage() {
     if (activeSection !== "comments") return;
     let mounted = true;
     setError(null);
-    setLoadingComments(true);
+    if (!commentsData) setLoadingComments(true); // Don't flash loading if we already have data
 
-    fetchJson(commentsApiUrl)
-      .then((commentsJson) => {
-        if (!mounted) return;
-        setCommentsData(commentsJson);
-      })
-      .catch((e) => mounted && setError((prev) => prev || e.message || "Failed to load comments data"))
-      .finally(() => mounted && setLoadingComments(false));
+    const fetchData = () => {
+      fetchJson(commentsApiUrl)
+        .then((commentsJson) => {
+          if (!mounted) return;
+          setCommentsData(commentsJson);
+        })
+        .catch((e) => {
+          if (mounted) setError((prev) => prev || e.message || "Failed to load comments data");
+        })
+        .finally(() => {
+          if (mounted) setLoadingComments(false);
+        });
+    };
+
+    fetchData();
+    const interval = setInterval(fetchData, 60000);
 
     return () => {
       mounted = false;
+      clearInterval(interval);
     };
   }, [activeSection, commentsApiUrl]);
 
@@ -94,18 +114,28 @@ export default function RedditPage() {
     if (activeSection !== "advanced") return;
     let mounted = true;
     setError(null);
-    setLoadingFeatures(true);
+    if (!featureData) setLoadingFeatures(true); // Don't flash loading if we already have data
 
-    fetchJson(featuresApiUrl)
-      .then((featuresJson) => {
-        if (!mounted) return;
-        setFeatureData(featuresJson);
-      })
-      .catch((e) => mounted && setError((prev) => prev || e.message || "Failed to load advanced insights"))
-      .finally(() => mounted && setLoadingFeatures(false));
+    const fetchData = () => {
+      fetchJson(featuresApiUrl)
+        .then((featuresJson) => {
+          if (!mounted) return;
+          setFeatureData(featuresJson);
+        })
+        .catch((e) => {
+          if (mounted) setError((prev) => prev || e.message || "Failed to load advanced insights");
+        })
+        .finally(() => {
+          if (mounted) setLoadingFeatures(false);
+        });
+    };
+
+    fetchData();
+    const interval = setInterval(fetchData, 60000);
 
     return () => {
       mounted = false;
+      clearInterval(interval);
     };
   }, [activeSection, featuresApiUrl]);
 
@@ -266,7 +296,7 @@ export default function RedditPage() {
                 <section className="hero-board">
                   <div className="hero-head">
                     <h1>REDDIT DASHBOARD</h1>
-                    <span className="tag">Mode: without streaming</span>
+                    <span className="tag">Mode: Real-time</span>
                   </div>
                   <p className="hero-sub">
                     {error
@@ -283,7 +313,7 @@ export default function RedditPage() {
                   <article className="kpi">
                     <p className="kpi-label">Total Posts</p>
                     <p className="kpi-value">{formatNumber(kpis.total_posts)}</p>
-                    <p className="kpi-note">Without streaming</p>
+                    <p className="kpi-note">Real-time update</p>
                   </article>
                   <article className="kpi">
                     <p className="kpi-label">Total Engagement</p>
