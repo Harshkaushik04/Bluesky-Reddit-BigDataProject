@@ -14,8 +14,11 @@ wsl_venv/
 qdrant
 qdrant/
 pycache/
+models/
 __pycache__/
 backend/reddit_dashboard.db
-*.dbmodels/
-__pycache__/
-
+*.db
+repomix-output.xml
+repomix-output.md
+qdrant_storage_native/
+app/mnt/

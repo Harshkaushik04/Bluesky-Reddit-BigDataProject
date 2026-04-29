@@ -1,9 +1,11 @@
 import json
+import os
 import time
 from pathlib import Path
 from typing import Iterable
 
 import requests
+from kafka import KafkaProducer
 
 BASE = Path("D:/Bluesky-Reddit-BigDataProject/Bluesky_data")
 TRACKING_FILE = BASE / "silver/getPosts/processed_root_uris.txt"
@@ -11,6 +13,9 @@ RESULTS_FILE = BASE / "silver/getPosts/posts_results.jsonl"
 STREAMING_FILE = BASE / "streaming/getposts/posts_stream.jsonl"
 FIREHOSE_DIR = BASE / "streaming/firehose"
 BSKY_API_URL = "https://public.api.bsky.app/xrpc/app.bsky.feed.getPosts"
+KAFKA_ENABLED = os.getenv("KAFKA_ENABLED", "false").lower() == "true"
+KAFKA_BROKERS = [s.strip() for s in os.getenv("KAFKA_BROKERS", "localhost:9092").split(",") if s.strip()]
+KAFKA_TOPIC = os.getenv("KAFKA_GETPOSTS_TOPIC", "bluesky.getposts.raw")
 
 
 def ensure_dirs():
@@ -63,8 +68,28 @@ def append_lines(path: Path, lines: Iterable[str]):
         f.flush()
 
 
+def maybe_init_kafka_producer() -> KafkaProducer | None:
+    if not KAFKA_ENABLED:
+        return None
+    return KafkaProducer(
+        bootstrap_servers=KAFKA_BROKERS,
+        value_serializer=lambda v: json.dumps(v, ensure_ascii=False).encode("utf-8"),
+    )
+
+
+def publish_posts_to_kafka(producer: KafkaProducer | None, posts: list[dict]):
+    if producer is None or not posts:
+        return
+    for post in posts:
+        producer.send(KAFKA_TOPIC, value=post)
+    producer.flush()
+
+
 def run_forever():
     ensure_dirs()
+    producer = maybe_init_kafka_producer()
+    if producer is not None:
+        print(f"[getPosts] Kafka enabled. brokers={KAFKA_BROKERS} topic={KAFKA_TOPIC}")
     while True:
         processed = load_processed()
         new_uris = list(dict.fromkeys(iter_new_uris(processed)))
@@ -80,6 +105,7 @@ def run_forever():
                 posts = fetch_posts(chunk)
                 append_jsonl(RESULTS_FILE, posts)
                 append_jsonl(STREAMING_FILE, posts)
+                publish_posts_to_kafka(producer, posts)
                 append_lines(TRACKING_FILE, chunk)
                 print(f"[getPosts] Saved {len(posts)} posts from {len(chunk)} URIs.")
             except Exception as exc:

@@ -1,9 +1,10 @@
 import { WebSocket } from "ws";
+import { Kafka, Producer } from "kafkajs";
 import * as fs from "fs";
 import * as path from "path";
 
-const BRONZE_DIR = "D:\\Bluesky-Reddit-BigDataProject\\Bluesky_data\\initial_firehose";
-const STREAMING_DIR = "D:\\Bluesky-Reddit-BigDataProject\\Bluesky_data\\streaming\\firehose";
+const BRONZE_DIR = "/mnt/d/Bluesky-Reddit-BigDataProject/Bluesky_data/initial_firehose";
+const STREAMING_DIR = "/mnt/d/Bluesky-Reddit-BigDataProject/Bluesky_data/streaming/firehose";
 
 [BRONZE_DIR, STREAMING_DIR].forEach((dir) => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -21,12 +22,44 @@ function getCurrentFilename(baseDir: string): string {
 
 const JETSTREAM_URL =
   "wss://jetstream2.us-east.bsky.network/subscribe?wantedCollections=app.bsky.feed.post&wantedCollections=app.bsky.feed.like&wantedCollections=app.bsky.graph.follow";
+const KAFKA_ENABLED = process.env.KAFKA_ENABLED === "true";
+const KAFKA_BROKERS = (process.env.KAFKA_BROKERS || "localhost:9092")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+const KAFKA_TOPIC = process.env.KAFKA_FIREHOSE_TOPIC || "bluesky.firehose.raw";
 
 let ws: WebSocket | null = null;
 let postCount = 0;
 let interactionCount = 0;
 let isConnecting = false;
 let lastMessageTime = Date.now();
+let kafkaProducer: Producer | null = null;
+
+async function initKafkaProducer() {
+  if (!KAFKA_ENABLED) return;
+  const kafka = new Kafka({
+    clientId: "bluesky-firehose-producer",
+    brokers: KAFKA_BROKERS,
+  });
+  kafkaProducer = kafka.producer();
+  await kafkaProducer.connect();
+  console.log(
+    `[System] Kafka producer connected. brokers=${KAFKA_BROKERS.join(",")} topic=${KAFKA_TOPIC}`
+  );
+}
+
+async function publishToKafka(rawString: string) {
+  if (!kafkaProducer) return;
+  try {
+    await kafkaProducer.send({
+      topic: KAFKA_TOPIC,
+      messages: [{ value: rawString }],
+    });
+  } catch (err) {
+    console.error("[Kafka] Publish failed:", err);
+  }
+}
 
 function persistRecord(rawString: string) {
   fs.appendFile(getCurrentFilename(BRONZE_DIR), rawString + "\n", (err) => {
@@ -44,7 +77,9 @@ function connect() {
   ws = new WebSocket(JETSTREAM_URL, { family: 4 });
 
   ws.on("open", () => {
-    console.log("[System] Connected. Writing bronze + streaming feeds.");
+    console.log(
+      `[System] Connected. Writing bronze + streaming feeds${KAFKA_ENABLED ? " + Kafka" : ""}.`
+    );
     isConnecting = false;
     lastMessageTime = Date.now();
   });
@@ -60,6 +95,7 @@ function connect() {
       // ignore
     }
     persistRecord(rawString);
+    void publishToKafka(rawString);
   });
 
   ws.on("error", (err) => console.error("[WebSocket Error]:", err.message));
@@ -69,8 +105,6 @@ function connect() {
     ws = null;
   });
 }
-
-connect();
 
 setInterval(() => {
   const isSocketClosed = !ws || ws.readyState !== WebSocket.OPEN;
@@ -90,4 +124,32 @@ setInterval(() => {
   postCount = 0;
   interactionCount = 0;
 }, 10000);
+
+void (async () => {
+  try {
+    await initKafkaProducer();
+  } catch (err) {
+    console.error("[Kafka] Producer initialization failed:", err);
+  }
+  connect();
+})();
+
+async function shutdown() {
+  if (ws) ws.terminate();
+  if (kafkaProducer) {
+    try {
+      await kafkaProducer.disconnect();
+    } catch {
+      // ignore shutdown errors
+    }
+  }
+  process.exit(0);
+}
+
+process.on("SIGINT", () => {
+  void shutdown();
+});
+process.on("SIGTERM", () => {
+  void shutdown();
+});
 

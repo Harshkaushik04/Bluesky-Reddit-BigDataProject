@@ -9,6 +9,7 @@ engine = create_engine(db_url)
 base_path = "/mnt/d/Bluesky-Reddit-BigDataProject/Bluesky_data/gold/"
 
 tables_to_load = {
+    "word_time_series": base_path + "vaderSentimentAnalysisFinal",
     "ingestion_metrics_timeline": base_path + "ingestion_metrics_timeline",
     "controversial_topics_timeline": base_path + "controversial_topics_timeline",
     "reddit_crossover_stats": base_path + "reddit_crossover_stats"

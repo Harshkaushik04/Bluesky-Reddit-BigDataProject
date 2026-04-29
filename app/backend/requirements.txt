@@ -4,4 +4,7 @@ sqlalchemy
 psycopg2-binary
 pydantic
 python-dateutil
-llama-cpp-python
+httpx
+python-dotenv
+qdrant-client
+sentence-transformers
