@@ -1,0 +1,14 @@
+# Qdrant for /retrievePosts and why-sentiments VectorDB.
+# Requires Docker running: `docker info` should succeed.
+# From app/: docker compose -f docker-compose.qdrant.yml up -d
+
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - /mnt/d/Bluesky-Reddit-BigDataProject/Bluesky_data/qdrant/qdrant_storage:/qdrant/storage
+      - /mnt/d/Bluesky-Reddit-BigDataProject/Bluesky_data/qdrant/qdrant_config:/qdrant/config

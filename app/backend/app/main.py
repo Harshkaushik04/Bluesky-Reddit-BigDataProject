@@ -321,6 +321,16 @@ class RetrievePostsRequest(BaseModel):
     min_text_length: int = 1
 
 
+def _qdrant_try_http_ping() -> tuple[bool, str | None]:
+    """Return (True, None) if Qdrant HTTP API responds, else (False, error message)."""
+    try:
+        resp = httpx.get(f"http://{QDRANT_HOST}:{QDRANT_PORT}/collections", timeout=3.0)
+        resp.raise_for_status()
+        return True, None
+    except Exception as exc:
+        return False, f"{type(exc).__name__}: {exc}"
+
+
 def _qdrant_wait_for_collection_loaded() -> None:
     # Poll until Qdrant reports the collection exists.
     deadline = time.time() + QDRANT_STARTUP_TIMEOUT_SECONDS
@@ -346,12 +356,40 @@ def _qdrant_wait_for_collection_loaded() -> None:
     )
 
 
-def _docker_start_qdrant_if_needed() -> bool:
+def _is_any_llm_loaded() -> tuple[bool, str | None]:
     """
-    Starts the qdrant container if QDRANT_ON_DEMAND is enabled.
+    Checks the configured LLM server and returns:
+    - (True, None) if a model is actively serving completions
+    - (False, error_or_reason) otherwise
+    """
+    headers = {"Authorization": f"Bearer {LLM_API_KEY}"} if LLM_API_KEY else {}
+    selected_model = LLM_MODEL.strip()
+    if not selected_model:
+        return False, "LLM_MODEL is empty; treating as not loaded."
+
+    probe_payload = {
+        "model": selected_model,
+        "messages": [{"role": "user", "content": "ping"}],
+        "max_tokens": 1,
+        "temperature": 0.0,
+    }
+    try:
+        with httpx.Client(base_url=LLM_BASE_URL, timeout=5.0, headers=headers) as client:
+            response = client.post("chat/completions", json=probe_payload)
+            if response.status_code < 400:
+                return True, None
+            body_preview = response.text[:300]
+            return False, f"Probe completion failed: status={response.status_code} body={body_preview}"
+    except Exception as exc:
+        return False, f"{type(exc).__name__}: {exc}"
+
+
+def _docker_start_qdrant_if_needed(*, force_start: bool = False) -> bool:
+    """
+    Starts the qdrant container if QDRANT_ON_DEMAND is enabled or when force_start=True.
     Returns True if we started it (caller should stop it later).
     """
-    if not QDRANT_ON_DEMAND:
+    if (not QDRANT_ON_DEMAND) and (not force_start):
         return False
 
     # Check running state.
@@ -420,39 +458,39 @@ def _docker_stop_qdrant_if_started(started_by_us: bool) -> None:
 
 @app.post("/retrievePosts")
 def retrieve_posts(payload: RetrievePostsRequest) -> dict[str, Any]:
-    started = False
     qdrant_collections: list[str] = []
+    ping_ok, ping_error = _qdrant_try_http_ping()
+    if not ping_ok:
+        raise HTTPException(status_code=503, detail="qdrant not running")
+
+    _qdrant_wait_for_collection_loaded()
     try:
-        started = _docker_start_qdrant_if_needed()
-        _qdrant_wait_for_collection_loaded()
-        try:
-            resp = httpx.get(f"http://{QDRANT_HOST}:{QDRANT_PORT}/collections", timeout=10)
-            resp.raise_for_status()
-            payload_json = resp.json()
-            cols = payload_json.get("result", {}).get("collections", [])
-            if isinstance(cols, list):
-                qdrant_collections = [c.get("name") for c in cols if isinstance(c, dict) and isinstance(c.get("name"), str)]
-        except Exception:
-            pass
-        retrieved = vectordb_top_texts_for_word(
-            payload.word,
-            limit=payload.limit,
-            min_text_length=payload.min_text_length,
-            allow_disabled=True,
+        resp = httpx.get(f"http://{QDRANT_HOST}:{QDRANT_PORT}/collections", timeout=10)
+        resp.raise_for_status()
+        payload_json = resp.json()
+        cols = payload_json.get("result", {}).get("collections", [])
+        if isinstance(cols, list):
+            qdrant_collections = [c.get("name") for c in cols if isinstance(c, dict) and isinstance(c.get("name"), str)]
+    except Exception:
+        logger.info("Unable to list Qdrant collections before retrievePosts: %s", ping_error)
+
+    retrieved = vectordb_top_texts_for_word(
+        payload.word,
+        limit=payload.limit,
+        min_text_length=payload.min_text_length,
+        allow_disabled=True,
+    )
+    if not retrieved:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "VectorDB returned no texts. "
+                "Check that QDRANT collection exists and payload text key. "
+                f"Qdrant collections={qdrant_collections or '[]'}; "
+                f"QDRANT_COLLECTION={QDRANT_COLLECTION}; min_text_length={payload.min_text_length}."
+            ),
         )
-        if not retrieved:
-            raise HTTPException(
-                status_code=404,
-                detail=(
-                    "VectorDB returned no texts. "
-                    "Check that QDRANT collection exists and payload text key. "
-                    f"Qdrant collections={qdrant_collections or '[]'}; "
-                    f"QDRANT_COLLECTION={QDRANT_COLLECTION}; min_text_length={payload.min_text_length}."
-                ),
-            )
-        return {"word": payload.word, "retrieved_texts": retrieved, "vectordb_error": _vectordb_load_error}
-    finally:
-        _docker_stop_qdrant_if_started(started)
+    return {"word": payload.word, "retrieved_texts": retrieved, "vectordb_error": _vectordb_load_error}
 
 
 @app.post("/getDataCollectedStats")
@@ -588,6 +626,10 @@ def word_popularity_timeline(payload: WordPopularityRequest) -> dict[str, Any]:
 @app.post("/actionRecommend")
 def action_recommend(payload: ActionRecommendRequest) -> dict[str, str]:
     global _llm_load_error
+    qdrant_running, _ = _qdrant_try_http_ping()
+    if qdrant_running:
+        raise HTTPException(status_code=409, detail="qdrant is still running")
+
     words = [w.strip(".,!?;:()[]{}\"'").lower() for w in payload.sentence.split() if w.strip()]
     if not words:
         raise HTTPException(status_code=400, detail="Sentence must include at least one word.")
@@ -679,6 +721,10 @@ def action_recommend(payload: ActionRecommendRequest) -> dict[str, str]:
 @app.post("/why-sentiments")
 def why_sentiments(payload: WhySentimentsRequest) -> dict[str, Any]:
     global _llm_load_error
+    qdrant_running, _ = _qdrant_try_http_ping()
+    if qdrant_running:
+        raise HTTPException(status_code=409, detail="qdrant still running,close it")
+
     # 1) Fetch full sentiment series for the word in range.
     stmt = text(
         """
