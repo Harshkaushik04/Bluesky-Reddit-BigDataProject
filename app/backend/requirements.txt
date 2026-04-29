@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg2-binary
+pydantic
+python-dateutil
+httpx
+python-dotenv
+qdrant-client
+sentence-transformers

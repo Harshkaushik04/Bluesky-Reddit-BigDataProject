@@ -1,0 +1,19 @@
+{
+  "name": "bluesky-dashboard-app",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "firehose": "ts-node firehose.ts"
+  },
+  "dependencies": {
+    "@types/ws": "^8.18.1",
+    "kafkajs": "^2.2.4",
+    "repomix": "^1.14.0",
+    "ws": "^8.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.9.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}
