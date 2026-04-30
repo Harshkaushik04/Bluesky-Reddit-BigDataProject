@@ -262,7 +262,7 @@ def main():
     print(f"\nNext steps:")
     print(f"  1. python comments_post_producer.py   (start fetching live data)")
     print(f"  2. python spark_reddit_metrics.py      (start streaming processor)")
-    print(f"  3. uvicorn main:app --reload           (start API)")
+    print(f"  3. uvicorn main:app --host 0.0.0.0 --port 8000  (start API)")
     print(f"  4. cd frontend && npm run dev          (start dashboard)")
 
 

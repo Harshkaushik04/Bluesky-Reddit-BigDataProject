@@ -2,17 +2,75 @@ import React, { useEffect, useMemo, useState } from "react";
 import TopNav from "../components/TopNav.jsx";
 import FilterStrip from "../components/FilterStrip.jsx";
 import usePageTheme from "../hooks/usePageTheme.js";
-import { fetchJson } from "../utils/api.js";
+import { apiUrl, fetchJson } from "../utils/api.js";
 import { formatNumber } from "../utils/format.js";
 import VolumeChart from "../components/VolumeChart.jsx";
 import PostTypePie from "../components/PostTypePie.jsx";
+import MonthlyActivityBarChart from "../components/MonthlyActivityBarChart.jsx";
+import TopicSentimentHeatmap from "../components/TopicSentimentHeatmap.jsx";
 
-const API_BASE = "http://10.116.37.242:8000/api/reddit/overview";
-const COMMENTS_API_BASE = "http://10.116.37.242:8000/api/reddit/comments/overview";
-const FEATURES_API_BASE = "http://10.116.37.242:8000/api/reddit/feature-insights";
-const RECOMMEND_API_BASE = "http://10.116.37.242:8000/api/reddit/action-recommend";
-const RETRIEVE_API_BASE = "http://10.116.37.242:8000/api/reddit/retrieve-posts";
-const WHY_API_BASE = "http://10.116.37.242:8000/api/reddit/why-sentiments";
+const API_BASE = apiUrl("/api/reddit/overview");
+const COMMENTS_API_BASE = apiUrl("/api/reddit/comments/overview");
+const FEATURES_API_BASE = apiUrl("/api/reddit/feature-insights");
+const RECOMMEND_API_BASE = apiUrl("/api/reddit/action-recommend");
+const RETRIEVE_API_BASE = apiUrl("/api/reddit/retrieve-posts");
+const WHY_API_BASE = apiUrl("/api/reddit/why-sentiments");
+
+function parseRecommendationGauge(result) {
+  if (!result || result.startsWith("Error")) return null;
+  const lower = result.toLowerCase();
+  const avgScore = Number(result.match(/avg_score=(-?\d+(?:\.\d+)?)/)?.[1] ?? 0);
+  const negFrac = Number(result.match(/neg_frac=(-?\d+(?:\.\d+)?)/)?.[1] ?? 0);
+  const minScore = Number(result.match(/min_score=(-?\d+(?:\.\d+)?)/)?.[1] ?? 0);
+  const shouldAvoid =
+    lower.includes("do not post") || avgScore <= -0.05 || negFrac >= 0.4 || minScore <= -0.25;
+
+  if (shouldAvoid) {
+    return {
+      status: "Avoid",
+      detail: "High negative signal for this wording.",
+      needle: 16,
+      className: "avoid",
+    };
+  }
+  if (avgScore >= 0.05 && negFrac < 0.25 && minScore >= 0) {
+    return {
+      status: "Safe to post",
+      detail: "Positive signal with low negative pressure.",
+      needle: 84,
+      className: "safe",
+    };
+  }
+  return {
+    status: "Risky",
+    detail: "Technically postable, but sentiment is weak or mixed.",
+    needle: 50,
+    className: "risky",
+  };
+}
+
+function PostRecommendationGauge({ result }) {
+  const gauge = parseRecommendationGauge(result);
+  if (!gauge) return null;
+
+  return (
+    <div className={`recommendation-gauge ${gauge.className}`}>
+      <div className="gauge-head">
+        <div>
+          <p className="gauge-label">Post Recommendation Gauge</p>
+          <h4>{gauge.status}</h4>
+        </div>
+        <span>{gauge.detail}</span>
+      </div>
+      <div className="gauge-track">
+        <div className="gauge-zone gauge-avoid">Avoid</div>
+        <div className="gauge-zone gauge-risky">Risky</div>
+        <div className="gauge-zone gauge-safe">Safe</div>
+        <div className="gauge-needle" style={{ left: `${gauge.needle}%` }} />
+      </div>
+    </div>
+  );
+}
 
 export default function RedditPage() {
   usePageTheme("reddit");
@@ -124,7 +182,7 @@ export default function RedditPage() {
   }, [activeSection, commentsApiUrl]);
 
   useEffect(() => {
-    if (activeSection !== "advanced") return;
+    if (activeSection !== "advanced" && activeSection !== "action-recommender") return;
     let mounted = true;
     setError(null);
     if (!featureData) setLoadingFeatures(true); // Don't flash loading if we already have data
@@ -244,6 +302,8 @@ export default function RedditPage() {
   const commentsKpis = commentsData?.kpis || {};
   const sentimentKpis = featureData?.sentiment_kpis || {};
   const controversialTopics = featureData?.controversial_topics || [];
+  const bestTopicsToPost = featureData?.best_topics_to_post || [];
+  const topicsToAvoid = featureData?.topics_to_avoid || [];
   const trendSummary = featureData?.trend_saturation?.summary || [];
   const trendSeriesByWord = featureData?.trend_saturation?.series_by_word || {};
 
@@ -523,6 +583,20 @@ export default function RedditPage() {
                   </article>
                 </section>
 
+                <section className="analytics-grid" style={{ gridTemplateColumns: "1fr" }}>
+                  <article className="panel">
+                    <h3>Monthly Post Activity</h3>
+                    <MonthlyActivityBarChart
+                      series={postsSeries}
+                      valueKey="posts"
+                      label="Posts"
+                      barClassName="monthly-bar-posts"
+                      color="#ff8a8a"
+                      emptyMessage="No monthly post data available."
+                    />
+                  </article>
+                </section>
+
                 <section className="bottom-grid">
                   <article className="panel">
                     <h3>Post Type Distribution</h3>
@@ -636,6 +710,21 @@ export default function RedditPage() {
                   <article className="panel">
                     <h3>Controversial Split</h3>
                     <PostTypePie split={commentsData?.controversial_split || []} />
+                  </article>
+                </section>
+
+                <section className="analytics-grid" style={{ gridTemplateColumns: "1fr" }}>
+                  <article className="panel">
+                    <h3>Weekly Comment Activity</h3>
+                    <MonthlyActivityBarChart
+                      series={commentsSeries}
+                      valueKey="total_comments"
+                      label="Comments"
+                      barClassName="monthly-bar-comments"
+                      color="#7d3d45"
+                      bucketMode="week"
+                      emptyMessage="No weekly comment data available."
+                    />
                   </article>
                 </section>
 
@@ -791,6 +880,13 @@ export default function RedditPage() {
                       colorB={{ area: "rgba(255,77,103,0.0)", line: "transparent" }}
                       colorC={{ area: "rgba(125,61,69,0.0)", line: "transparent" }}
                     />
+                  </article>
+                </section>
+
+                <section className="analytics-grid" style={{ gridTemplateColumns: "1fr" }}>
+                  <article className="panel">
+                    <h3>Sentiment Heatmap by Topic and Time</h3>
+                    <TopicSentimentHeatmap data={featureData?.topic_sentiment_heatmap} />
                   </article>
                 </section>
 
@@ -960,9 +1056,66 @@ export default function RedditPage() {
                         whiteSpace: "pre-wrap"
                       }}>
                         <h4 style={{ margin: "0 0 12px 0", color: "#fff" }}>Recommendation Result:</h4>
+                        <PostRecommendationGauge result={actionResult} />
                         <p style={{ margin: 0, lineHeight: 1.5, color: "#d8deee" }}>{actionResult}</p>
                       </div>
                     )}
+
+                    <div className="recommendation-topic-block">
+                      <h3>Best Topics to Post About</h3>
+                      <div className="bar-list opportunity-bars">
+                        {bestTopicsToPost.length ? (
+                          bestTopicsToPost.map((row) => {
+                            const maxScore = Math.max(...bestTopicsToPost.map((item) => Number(item.opportunity_score || 0)), 1);
+                            return (
+                              <div key={row.topic} className="bar-row opportunity-row">
+                                <p>{row.topic}</p>
+                                <div className="track">
+                                  <div
+                                    className="fill opportunity-fill"
+                                    style={{ width: `${Math.max((Number(row.opportunity_score || 0) / maxScore) * 100, 6)}%` }}
+                                  />
+                                </div>
+                                <p>{Number(row.opportunity_score || 0).toFixed(2)}</p>
+                                <span>
+                                  sentiment {Number(row.avg_sentiment || 0).toFixed(3)} · engagement {formatNumber(row.avg_engagement)}
+                                </span>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <p>{loadingFeatures ? "Loading best topics..." : "No positive topic opportunities found."}</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="recommendation-topic-block">
+                      <h3>Topics to Avoid</h3>
+                      <div className="bar-list opportunity-bars">
+                        {topicsToAvoid.length ? (
+                          topicsToAvoid.map((row) => {
+                            const maxScore = Math.max(...topicsToAvoid.map((item) => Number(item.avoid_score || 0)), 1);
+                            return (
+                              <div key={row.topic} className="bar-row opportunity-row">
+                                <p>{row.topic}</p>
+                                <div className="track">
+                                  <div
+                                    className="fill avoid-fill"
+                                    style={{ width: `${Math.max((Number(row.avoid_score || 0) / maxScore) * 100, 6)}%` }}
+                                  />
+                                </div>
+                                <p>{Number(row.avoid_score || 0).toFixed(2)}</p>
+                                <span>
+                                  sentiment {Number(row.avg_sentiment || 0).toFixed(3)} · negative {Math.round(Number(row.negative_rate || 0) * 100)}% · controversy {Number(row.avg_controversy || 0).toFixed(2)}
+                                </span>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <p>{loadingFeatures ? "Loading topics to avoid..." : "No high-risk topics found."}</p>
+                        )}
+                      </div>
+                    </div>
                   </article>
                 </section>
               </>

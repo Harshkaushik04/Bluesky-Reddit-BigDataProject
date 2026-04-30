@@ -1,6 +1,6 @@
 cd backend
 python spark_reddit_metrics.py
-uvicorn main:app --reload
+uvicorn main:app --host 0.0.0.0 --port 8000
 
 
 cd frontend
@@ -17,7 +17,7 @@ python spark_reddit_metrics.py
 
 
 cd backend
-uvicorn main:app --reload
+uvicorn main:app --host 0.0.0.0 --port 8000
 
 cd frontend
 npm run dev
@@ -41,7 +41,7 @@ python spark_reddit_metrics.py
 
 
 cd backend
-uvicorn main:app --reload
+uvicorn main:app --host 0.0.0.0 --port 8000
 
 
 cd frontend
