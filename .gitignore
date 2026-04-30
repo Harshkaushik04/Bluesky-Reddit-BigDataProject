@@ -24,3 +24,4 @@ qdrant_storage_native/
 app/mnt/
 reddit_yash_ki_divya/data/
 .env
+*.jsonl
