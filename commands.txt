@@ -21,3 +21,29 @@ uvicorn main:app --reload
 
 cd frontend
 npm run dev
+---------------------------------
+
+cd reddit_yash_ki_divya
+venv\Scripts\activate
+cd ..\backend
+python load_historic.py
+
+
+cd reddit_yash_ki_divya
+venv\Scripts\activate
+python comments_post_producer.py
+
+
+cd reddit_yash_ki_divya
+venv\Scripts\activate
+cd ..\backend
+python spark_reddit_metrics.py
+
+
+cd backend
+uvicorn main:app --reload
+
+
+cd frontend
+npm run dev
+

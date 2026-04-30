@@ -29,6 +29,13 @@ INSERT_SQL = (
     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 )
 
+COMMENT_INSERT_SQL = (
+    "INSERT INTO reddit_comment_facts "
+    "(run_id, row_uid, comment_id, created_date, year, month, body, score, ups, downs, "
+    "controversiality) "
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+)
+
 _VIDEO_EXTS = re.compile(r"\.(mp4|mov|webm|mkv)(\?|$)")
 _VIDEO_DOMAINS = re.compile(r"(v\.redd\.it|youtube\.com|youtu\.be|streamable\.com|twitch\.tv|redgifs\.com|gfycat\.com)")
 _IMAGE_EXTS = re.compile(r"\.(jpg|jpeg|png|gif|webp)(\?|$)")
@@ -134,7 +141,36 @@ def create_tables(conn: sqlite3.Connection) -> None:
             num_comments REAL NOT NULL, engagement REAL NOT NULL, post_type TEXT,
             FOREIGN KEY (run_id) REFERENCES reddit_runs(run_id)
         );
+        CREATE TABLE IF NOT EXISTS reddit_comment_facts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id INTEGER NOT NULL, row_uid TEXT NOT NULL, comment_id TEXT,
+            created_date TEXT NOT NULL, year INTEGER NOT NULL, month INTEGER NOT NULL,
+            body TEXT, score REAL NOT NULL, ups REAL NOT NULL, downs REAL NOT NULL,
+            controversiality INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (run_id) REFERENCES reddit_runs(run_id)
+        );
     """)
+
+
+def parse_comment_fact_row(record: dict, run_id: int):
+    created_utc = record.get("created_utc")
+    if created_utc is None:
+        return None
+    try:
+        dt = datetime.utcfromtimestamp(float(created_utc))
+    except (ValueError, TypeError, OSError):
+        return None
+    comment_id = str(record.get("id", ""))
+    body = str(record.get("body", "") or "")
+    score = float(record.get("score", 0) or 0)
+    ups = float(record.get("ups", 0) or 0)
+    downs = float(record.get("downs", 0) or 0)
+    controversiality = int(record.get("controversiality", 0) or 0)
+    return (
+        run_id, str(uuid.uuid4()), comment_id,
+        dt.strftime("%Y-%m-%d"), dt.year, dt.month,
+        body, score, ups, downs, controversiality,
+    )
 
 
 def main():
@@ -157,7 +193,9 @@ def main():
     print(f"Created run_id={run_id}")
 
     total_rows = 0
+    total_comment_rows = 0
     batch = []
+    comment_batch = []
     BATCH_SIZE = 2000
 
     for dir_path, is_comment in DIRS:
@@ -187,16 +225,29 @@ def main():
                     file_rows += 1
                     total_rows += 1
 
+                    # Also insert into reddit_comment_facts for comment analysis
+                    if is_comment:
+                        crow = parse_comment_fact_row(record, run_id)
+                        if crow is not None:
+                            comment_batch.append(crow)
+                            total_comment_rows += 1
+
                     if len(batch) >= BATCH_SIZE:
                         conn.executemany(INSERT_SQL, batch)
-                        conn.commit()
                         batch.clear()
+                    if len(comment_batch) >= BATCH_SIZE:
+                        conn.executemany(COMMENT_INSERT_SQL, comment_batch)
+                        comment_batch.clear()
+                        conn.commit()
 
             print(f" {file_rows:,} rows")
 
     if batch:
         conn.executemany(INSERT_SQL, batch)
-        conn.commit()
+    if comment_batch:
+        conn.executemany(COMMENT_INSERT_SQL, comment_batch)
+    conn.commit()
+    print(f"\nComment facts: {total_comment_rows:,} rows loaded into reddit_comment_facts")
 
     conn.execute(
         "UPDATE reddit_runs SET records_scanned = ? WHERE run_id = ?",

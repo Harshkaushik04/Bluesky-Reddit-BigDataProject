@@ -324,11 +324,12 @@ def reddit_overview(
         agg_row = conn.execute(
             f"""
             SELECT
-                COUNT(*) AS total_posts,
+                SUM(CASE WHEN post_type != 'comment' THEN 1 ELSE 0 END) AS total_posts,
                 COALESCE(AVG(score), 0) AS avg_score,
                 COALESCE(AVG(num_comments), 0) AS avg_comments,
                 COALESCE(SUM(engagement), 0) AS total_engagement,
-                COUNT(DISTINCT created_date) AS active_days
+                COUNT(DISTINCT created_date) AS active_days,
+                SUM(CASE WHEN post_type = 'comment' THEN 1 ELSE 0 END) AS total_comments
             FROM reddit_post_facts
             WHERE {where_clause}
             """,
@@ -341,21 +342,13 @@ def reddit_overview(
         total_engagement = float(agg_row[3]) if agg_row else 0.0
         active_days = int(agg_row[4]) if agg_row else 0
         avg_engagement_per_day = (total_engagement / active_days) if active_days else 0.0
-        comment_total_row = conn.execute(
-            f"""
-            SELECT COALESCE(SUM(num_comments), 0)
-            FROM reddit_post_facts
-            WHERE {where_clause}
-            """,
-            where_params,
-        ).fetchone()
-        total_comments_split = int(comment_total_row[0] or 0) if comment_total_row else 0
+        total_comments_split = int(agg_row[5]) if agg_row else 0
 
         timeline_rows = conn.execute(
             f"""
             SELECT created_date AS bucket, COUNT(*) AS count
             FROM reddit_post_facts
-            WHERE {where_clause}
+            WHERE {where_clause} AND post_type != 'comment'
             GROUP BY created_date
             ORDER BY created_date ASC
             """,
@@ -365,9 +358,9 @@ def reddit_overview(
             f"""
             SELECT
                 created_date AS bucket,
-                COUNT(*) AS posts,
+                SUM(CASE WHEN post_type != 'comment' THEN 1 ELSE 0 END) AS posts,
                 COALESCE(SUM(ups), 0) AS upvotes,
-                COALESCE(SUM(num_comments), 0) AS comments,
+                SUM(CASE WHEN post_type = 'comment' THEN 1 ELSE 0 END) AS comments,
                 COALESCE(SUM(engagement), 0) AS total
             FROM reddit_post_facts
             WHERE {where_clause}

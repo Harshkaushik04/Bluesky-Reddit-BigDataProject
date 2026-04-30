@@ -53,6 +53,7 @@ COMMENTS_SCHEMA = StructType([
     StructField("score", LongType()),
     StructField("ups", LongType()),
     StructField("downs", LongType()),
+    StructField("controversiality", LongType()),
     StructField("created_utc", DoubleType()),
 ])
 
@@ -67,6 +68,13 @@ INSERT_SQL = (
     "(run_id, row_uid, post_id, created_date, year, month, title, score, ups, downs, "
     "num_comments, engagement, post_type) "
     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+)
+
+COMMENT_INSERT_SQL = (
+    "INSERT INTO reddit_comment_facts "
+    "(run_id, row_uid, comment_id, created_date, year, month, body, score, ups, downs, "
+    "controversiality) "
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 )
 
 db_lock = threading.Lock()
@@ -169,16 +177,17 @@ def _process_comments_batch(df, batch_id):
         score = float(row["score"] or 0)
         ups = float(row["ups"] or 0)
         downs = float(row["downs"] or 0)
+        controversiality = int(row["controversiality"] or 0)
         fact_rows.append((
             run_id, str(uuid.uuid4()), str(row["id"] or ""),
             dt.strftime("%Y-%m-%d"), dt.year, dt.month,
             str(row["body"] or ""), score, ups, downs,
-            0.0, 1.0 + ups + downs, "comment",
+            controversiality,
         ))
     if fact_rows:
         with db_lock:
             with sqlite3.connect(str(DB_PATH)) as conn:
-                conn.executemany(INSERT_SQL, fact_rows)
+                conn.executemany(COMMENT_INSERT_SQL, fact_rows)
                 conn.execute(
                     "UPDATE reddit_runs SET records_scanned = records_scanned + ? WHERE run_id = ?",
                     (len(fact_rows), run_id),
