@@ -1,404 +1,261 @@
+"""
+Spark Structured Streaming: watches posts_live/ and comments_live/ for new files,
+processes each file exactly once, and appends rows to the SQLite database.
+"""
 from __future__ import annotations
 
+import re
 import sqlite3
 import uuid
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
-
+from pyspark.sql.types import (
+    StructType, StructField, StringType, LongType, BooleanType, DoubleType,
+)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-POSTS_GLOB = str(BASE_DIR / "reddit_yash_ki_divya" / "data" / "posts" / "*.jsonl")
 DB_PATH = BASE_DIR / "backend" / "reddit_dashboard.db"
-TOP_K = 6
-TIMELINE_K = 12
 
-STOPWORDS = [
-    "about",
-    "after",
-    "all",
-    "also",
-    "and",
-    "any",
-    "are",
-    "been",
-    "before",
-    "being",
-    "but",
-    "can",
-    "could",
-    "did",
-    "does",
-    "for",
-    "from",
-    "had",
-    "has",
-    "have",
-    "her",
-    "here",
-    "him",
-    "his",
-    "how",
-    "its",
-    "just",
-    "more",
-    "most",
-    "not",
-    "now",
-    "our",
-    "out",
-    "she",
-    "that",
-    "the",
-    "their",
-    "them",
-    "there",
-    "they",
-    "this",
-    "too",
-    "was",
-    "were",
-    "what",
-    "when",
-    "where",
-    "which",
-    "who",
-    "will",
-    "with",
-    "would",
-    "you",
-    "your",
-]
+POSTS_LIVE_DIR = str(BASE_DIR / "reddit_yash_ki_divya" / "data" / "posts_live")
+COMMENTS_LIVE_DIR = str(BASE_DIR / "reddit_yash_ki_divya" / "data" / "comments_live")
 
+POSTS_CHECKPOINT = str(BASE_DIR / "backend" / "checkpoint_posts")
+COMMENTS_CHECKPOINT = str(BASE_DIR / "backend" / "checkpoint_comments")
 
-def ensure_post_fact_columns(conn: sqlite3.Connection) -> None:
-    existing_columns = {
-        row[1]
-        for row in conn.execute("PRAGMA table_info(reddit_post_facts)").fetchall()
-    }
-    if "post_type" not in existing_columns:
-        conn.execute("ALTER TABLE reddit_post_facts ADD COLUMN post_type TEXT")
+# ---------- Schemas (only the fields we need) ----------
+POSTS_SCHEMA = StructType([
+    StructField("id", StringType()),
+    StructField("subreddit", StringType()),
+    StructField("title", StringType()),
+    StructField("score", LongType()),
+    StructField("ups", LongType()),
+    StructField("downs", LongType()),
+    StructField("num_comments", LongType()),
+    StructField("post_hint", StringType()),
+    StructField("is_video", BooleanType()),
+    StructField("url", StringType()),
+    StructField("domain", StringType()),
+    StructField("url_overridden_by_dest", StringType()),
+    StructField("selftext", StringType()),
+    StructField("is_gallery", BooleanType()),
+    StructField("crosspost_parent", StringType()),
+    StructField("created_utc", DoubleType()),
+])
+
+COMMENTS_SCHEMA = StructType([
+    StructField("id", StringType()),
+    StructField("subreddit", StringType()),
+    StructField("body", StringType()),
+    StructField("score", LongType()),
+    StructField("ups", LongType()),
+    StructField("downs", LongType()),
+    StructField("controversiality", LongType()),
+    StructField("created_utc", DoubleType()),
+])
+
+# ---------- Post type classification ----------
+_VIDEO_EXTS = re.compile(r"\.(mp4|mov|webm|mkv)(\?|$)")
+_VIDEO_DOMAINS = re.compile(r"(v\.redd\.it|youtube\.com|youtu\.be|streamable\.com|twitch\.tv|redgifs\.com|gfycat\.com)")
+_IMAGE_EXTS = re.compile(r"\.(jpg|jpeg|png|gif|webp)(\?|$)")
+_IMAGE_DOMAINS = re.compile(r"(i\.redd\.it|imgur\.com|flickr\.com|images?)")
+
+INSERT_SQL = (
+    "INSERT INTO reddit_post_facts "
+    "(run_id, row_uid, post_id, created_date, year, month, title, score, ups, downs, "
+    "num_comments, engagement, post_type) "
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+)
+
+COMMENT_INSERT_SQL = (
+    "INSERT INTO reddit_comment_facts "
+    "(run_id, row_uid, comment_id, created_date, year, month, body, score, ups, downs, "
+    "controversiality) "
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+)
+
+db_lock = threading.Lock()
 
 
-def create_tables(conn: sqlite3.Connection) -> None:
-    conn.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS reddit_runs (
-            run_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            run_ts TEXT NOT NULL,
-            source_path TEXT NOT NULL,
-            records_scanned INTEGER NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS reddit_kpis (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            run_id INTEGER NOT NULL,
-            total_content INTEGER NOT NULL,
-            total_posts INTEGER NOT NULL,
-            avg_sentiment REAL NOT NULL,
-            avg_score REAL NOT NULL,
-            avg_comments REAL NOT NULL,
-            FOREIGN KEY (run_id) REFERENCES reddit_runs(run_id)
-        );
-
-        CREATE TABLE IF NOT EXISTS reddit_content_split (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            run_id INTEGER NOT NULL,
-            posts INTEGER NOT NULL,
-            comments INTEGER NOT NULL,
-            FOREIGN KEY (run_id) REFERENCES reddit_runs(run_id)
-        );
-
-        CREATE TABLE IF NOT EXISTS reddit_top_subreddits (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            run_id INTEGER NOT NULL,
-            rank INTEGER NOT NULL,
-            label TEXT NOT NULL,
-            value INTEGER NOT NULL,
-            FOREIGN KEY (run_id) REFERENCES reddit_runs(run_id)
-        );
-
-        CREATE TABLE IF NOT EXISTS reddit_top_keywords (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            run_id INTEGER NOT NULL,
-            rank INTEGER NOT NULL,
-            label TEXT NOT NULL,
-            value INTEGER NOT NULL,
-            FOREIGN KEY (run_id) REFERENCES reddit_runs(run_id)
-        );
-
-        CREATE TABLE IF NOT EXISTS reddit_timeline (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            run_id INTEGER NOT NULL,
-            bucket TEXT NOT NULL,
-            count INTEGER NOT NULL,
-            FOREIGN KEY (run_id) REFERENCES reddit_runs(run_id)
-        );
-
-        CREATE TABLE IF NOT EXISTS reddit_post_facts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            run_id INTEGER NOT NULL,
-            row_uid TEXT NOT NULL,
-            post_id TEXT,
-            created_date TEXT NOT NULL,
-            year INTEGER NOT NULL,
-            month INTEGER NOT NULL,
-            title TEXT,
-            score REAL NOT NULL,
-            ups REAL NOT NULL,
-            downs REAL NOT NULL,
-            num_comments REAL NOT NULL,
-            engagement REAL NOT NULL,
-            post_type TEXT,
-            FOREIGN KEY (run_id) REFERENCES reddit_runs(run_id)
-        );
-        """
-    )
+def _get_run_id() -> int:
+    """Get the latest run_id from the database (created by load_historic.py)."""
+    with sqlite3.connect(str(DB_PATH)) as conn:
+        row = conn.execute(
+            "SELECT run_id FROM reddit_runs ORDER BY run_id DESC LIMIT 1"
+        ).fetchone()
+    if row:
+        return row[0]
+    raise RuntimeError("No run_id found in DB. Run load_historic.py first!")
 
 
-def main() -> None:
+def _classify_post_type(row, is_comment: bool) -> str:
+    if is_comment:
+        return "comment"
+    post_hint = str(row["post_hint"] or "").lower() if row["post_hint"] else ""
+    is_video = bool(row["is_video"]) if row["is_video"] is not None else False
+    url = str(row["url"] or "").lower() if row["url"] else ""
+    domain = str(row["domain"] or "").lower() if row["domain"] else ""
+    url_dest = str(row["url_overridden_by_dest"] or "").lower() if row["url_overridden_by_dest"] else ""
+    selftext = str(row["selftext"] or "").strip() if row["selftext"] else ""
+    is_gallery = bool(row["is_gallery"]) if row["is_gallery"] is not None else False
+    crosspost_parent = str(row["crosspost_parent"] or "") if row["crosspost_parent"] else ""
+    if is_gallery:
+        return "gallery"
+    if is_video or post_hint in {"rich:video", "hosted:video", "video"} or _VIDEO_EXTS.search(url) or _VIDEO_EXTS.search(url_dest) or _VIDEO_DOMAINS.search(url) or _VIDEO_DOMAINS.search(url_dest) or _VIDEO_DOMAINS.search(domain):
+        return "video"
+    if post_hint == "image" or _IMAGE_EXTS.search(url) or _IMAGE_EXTS.search(url_dest) or _IMAGE_DOMAINS.search(domain):
+        return "image"
+    if post_hint == "poll":
+        return "poll"
+    if len(crosspost_parent) > 0:
+        return "crosspost"
+    if post_hint == "link" or (len(url) > 0 and len(selftext) == 0):
+        return "link"
+    if len(selftext) > 0:
+        return "text"
+    return "other"
+
+
+def _process_posts_batch(df, batch_id):
+    """Called by Spark for each micro-batch of new post files."""
+    count = df.count()
+    if count == 0:
+        return
+    run_id = _get_run_id()
+    rows = df.collect()
+    fact_rows = []
+    for row in rows:
+        created_utc = row["created_utc"]
+        if created_utc is None:
+            continue
+        try:
+            dt = datetime.utcfromtimestamp(float(created_utc))
+        except (ValueError, TypeError, OSError):
+            continue
+        score = float(row["score"] or 0)
+        ups = float(row["ups"] or 0)
+        downs = float(row["downs"] or 0)
+        num_comments = float(row["num_comments"] or 0)
+        post_type = _classify_post_type(row, is_comment=False)
+        fact_rows.append((
+            run_id, str(uuid.uuid4()), str(row["id"] or ""),
+            dt.strftime("%Y-%m-%d"), dt.year, dt.month,
+            str(row["title"] or ""), score, ups, downs,
+            num_comments, 1.0 + ups + downs + num_comments, post_type,
+        ))
+    if fact_rows:
+        with db_lock:
+            with sqlite3.connect(str(DB_PATH)) as conn:
+                conn.executemany(INSERT_SQL, fact_rows)
+                conn.execute(
+                    "UPDATE reddit_runs SET records_scanned = records_scanned + ? WHERE run_id = ?",
+                    (len(fact_rows), run_id),
+                )
+                conn.commit()
+    print(f"[Posts  Batch {batch_id}] +{len(fact_rows)} rows (run_id={run_id})")
+
+
+def _process_comments_batch(df, batch_id):
+    """Called by Spark for each micro-batch of new comment files."""
+    count = df.count()
+    if count == 0:
+        return
+    run_id = _get_run_id()
+    rows = df.collect()
+    fact_rows = []
+    for row in rows:
+        created_utc = row["created_utc"]
+        if created_utc is None:
+            continue
+        try:
+            dt = datetime.utcfromtimestamp(float(created_utc))
+        except (ValueError, TypeError, OSError):
+            continue
+        score = float(row["score"] or 0)
+        ups = float(row["ups"] or 0)
+        downs = float(row["downs"] or 0)
+        controversiality = int(row["controversiality"] or 0)
+        fact_rows.append((
+            run_id, str(uuid.uuid4()), str(row["id"] or ""),
+            dt.strftime("%Y-%m-%d"), dt.year, dt.month,
+            str(row["body"] or ""), score, ups, downs,
+            controversiality,
+        ))
+    if fact_rows:
+        with db_lock:
+            with sqlite3.connect(str(DB_PATH)) as conn:
+                conn.executemany(COMMENT_INSERT_SQL, fact_rows)
+                conn.execute(
+                    "UPDATE reddit_runs SET records_scanned = records_scanned + ? WHERE run_id = ?",
+                    (len(fact_rows), run_id),
+                )
+                conn.commit()
+    print(f"[Comts Batch {batch_id}] +{len(fact_rows)} rows (run_id={run_id})")
+
+
+def main():
+    run_id = _get_run_id()
+    print(f"Using run_id={run_id} from database")
+
     spark = (
-        SparkSession.builder.appName("RedditMetricsBatch")
+        SparkSession.builder
+        .appName("RedditStructuredStreaming")
         .master("local[*]")
+        .config("spark.driver.memory", "2g")
         .getOrCreate()
     )
     spark.sparkContext.setLogLevel("WARN")
 
-    raw_df = spark.read.json(POSTS_GLOB)
-    available_cols = set(raw_df.columns)
-
-    def safe_col(name: str):
-        return F.col(name) if name in available_cols else F.lit(None)
-
-    posts_df = raw_df.select(
-        safe_col("id").alias("post_id"),
-        safe_col("subreddit").alias("subreddit"),
-        safe_col("title").alias("title"),
-        safe_col("score").cast("double").alias("score"),
-        safe_col("ups").cast("double").alias("ups"),
-        safe_col("downs").cast("double").alias("downs"),
-        safe_col("num_comments").cast("double").alias("num_comments"),
-        safe_col("post_hint").alias("post_hint"),
-        safe_col("is_video").alias("is_video"),
-        safe_col("url").alias("url"),
-        safe_col("domain").alias("domain"),
-        safe_col("url_overridden_by_dest").alias("url_overridden_by_dest"),
-        safe_col("selftext").alias("selftext"),
-        safe_col("is_gallery").alias("is_gallery"),
-        safe_col("crosspost_parent").alias("crosspost_parent"),
-        safe_col("poll_data").alias("poll_data"),
-        safe_col("created_utc").cast("double").alias("created_utc"),
+    # --- Posts stream ---
+    posts_stream = (
+        spark.readStream
+        .format("json")
+        .schema(POSTS_SCHEMA)
+        .option("maxFilesPerTrigger", 10)
+        .option("cleanSource", "off")
+        .load(POSTS_LIVE_DIR)
     )
-
-    records_scanned = posts_df.count()
-    avg_row = posts_df.select(
-        F.coalesce(F.avg("score"), F.lit(0.0)).alias("avg_score"),
-        F.coalesce(F.avg("num_comments"), F.lit(0.0)).alias("avg_comments"),
-    ).first()
-    avg_score = float(avg_row["avg_score"])
-    avg_comments = float(avg_row["avg_comments"])
-
-    top_subreddits = (
-        posts_df.groupBy("subreddit")
-        .count()
-        .where(F.col("subreddit").isNotNull() & (F.length("subreddit") > 0))
-        .orderBy(F.col("count").desc())
-        .limit(TOP_K)
-        .collect()
+    posts_query = (
+        posts_stream.writeStream
+        .foreachBatch(_process_posts_batch)
+        .option("checkpointLocation", POSTS_CHECKPOINT)
+        .trigger(processingTime="10 seconds")
+        .start()
     )
+    print(f"Posts stream started — watching {POSTS_LIVE_DIR}")
 
-    words_df = (
-        posts_df.withColumn("title_clean", F.lower(F.coalesce(F.col("title"), F.lit(""))))
-        .withColumn("title_clean", F.regexp_replace("title_clean", r"[^a-zA-Z\s]", " "))
-        .withColumn("word", F.explode(F.split(F.col("title_clean"), r"\s+")))
-        .where((F.length("word") >= 3) & (~F.col("word").isin(STOPWORDS)))
+    # --- Comments stream ---
+    comments_stream = (
+        spark.readStream
+        .format("json")
+        .schema(COMMENTS_SCHEMA)
+        .option("maxFilesPerTrigger", 10)
+        .option("cleanSource", "off")
+        .load(COMMENTS_LIVE_DIR)
     )
-
-    top_keywords = (
-        words_df.groupBy("word")
-        .count()
-        .orderBy(F.col("count").desc())
-        .limit(TOP_K)
-        .collect()
+    comments_query = (
+        comments_stream.writeStream
+        .foreachBatch(_process_comments_batch)
+        .option("checkpointLocation", COMMENTS_CHECKPOINT)
+        .trigger(processingTime="10 seconds")
+        .start()
     )
+    print(f"Comments stream started — watching {COMMENTS_LIVE_DIR}")
 
-    timeline = (
-        posts_df.withColumn(
-            "bucket", F.date_format(F.from_unixtime(F.col("created_utc")), "yyyy-MM-dd")
-        )
-        .groupBy("bucket")
-        .count()
-        .where(F.col("bucket").isNotNull())
-        .orderBy(F.col("bucket").desc())
-        .limit(TIMELINE_K)
-        .orderBy(F.col("bucket").asc())
-        .collect()
-    )
+    print("\nSpark Structured Streaming is running. Press Ctrl+C to stop.")
+    print("New files in posts_live/ and comments_live/ will be auto-detected.\n")
 
-    run_ts = datetime.now(timezone.utc).isoformat()
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-
-    with sqlite3.connect(DB_PATH) as conn:
-        create_tables(conn)
-        ensure_post_fact_columns(conn)
-        cursor = conn.execute(
-            """
-            INSERT INTO reddit_runs (run_ts, source_path, records_scanned)
-            VALUES (?, ?, ?)
-            """,
-            (run_ts, POSTS_GLOB, records_scanned),
-        )
-        run_id = cursor.lastrowid
-
-        conn.execute(
-            """
-            INSERT INTO reddit_kpis
-            (run_id, total_content, total_posts, avg_sentiment, avg_score, avg_comments)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (run_id, records_scanned, records_scanned, 0.0, round(avg_score, 2), round(avg_comments, 2)),
-        )
-        conn.execute(
-            """
-            INSERT INTO reddit_content_split (run_id, posts, comments)
-            VALUES (?, ?, ?)
-            """,
-            (run_id, records_scanned, 0),
-        )
-
-        conn.executemany(
-            """
-            INSERT INTO reddit_top_subreddits (run_id, rank, label, value)
-            VALUES (?, ?, ?, ?)
-            """,
-            [
-                (run_id, idx + 1, row["subreddit"], int(row["count"]))
-                for idx, row in enumerate(top_subreddits)
-            ],
-        )
-        conn.executemany(
-            """
-            INSERT INTO reddit_top_keywords (run_id, rank, label, value)
-            VALUES (?, ?, ?, ?)
-            """,
-            [
-                (run_id, idx + 1, row["word"], int(row["count"]))
-                for idx, row in enumerate(top_keywords)
-            ],
-        )
-        conn.executemany(
-            """
-            INSERT INTO reddit_timeline (run_id, bucket, count)
-            VALUES (?, ?, ?)
-            """,
-            [(run_id, row["bucket"], int(row["count"])) for row in timeline],
-        )
-
-        facts_rows = (
-            posts_df.withColumn(
-                "created_date",
-                F.date_format(F.from_unixtime(F.col("created_utc")), "yyyy-MM-dd"),
-            )
-            .withColumn("year", F.year(F.to_date(F.col("created_date"))))
-            .withColumn("month", F.month(F.to_date(F.col("created_date"))))
-            .withColumn("score", F.coalesce(F.col("score"), F.lit(0.0)))
-            .withColumn("ups", F.coalesce(F.col("ups"), F.lit(0.0)))
-            .withColumn("downs", F.coalesce(F.col("downs"), F.lit(0.0)))
-            .withColumn("num_comments", F.coalesce(F.col("num_comments"), F.lit(0.0)))
-            .withColumn("post_hint", F.lower(F.coalesce(F.col("post_hint"), F.lit(""))))
-            .withColumn("is_video", F.coalesce(F.col("is_video"), F.lit(False)))
-            .withColumn("url", F.lower(F.coalesce(F.col("url"), F.lit(""))))
-            .withColumn("domain", F.lower(F.coalesce(F.col("domain"), F.lit(""))))
-            .withColumn(
-                "url_overridden_by_dest",
-                F.lower(F.coalesce(F.col("url_overridden_by_dest"), F.lit(""))),
-            )
-            .withColumn("selftext", F.trim(F.coalesce(F.col("selftext"), F.lit(""))))
-            .withColumn("is_gallery", F.coalesce(F.col("is_gallery"), F.lit(False)))
-            .withColumn("crosspost_parent", F.coalesce(F.col("crosspost_parent"), F.lit("")))
-            .withColumn("poll_data", F.coalesce(F.col("poll_data"), F.lit(None)))
-            .withColumn(
-                "post_type",
-                F.when(F.col("is_gallery") == True, F.lit("gallery"))
-                .when(
-                    (F.col("is_video") == True)
-                    | (F.col("post_hint").isin("rich:video", "hosted:video", "video"))
-                    | (F.col("url").rlike(r"\\.(mp4|mov|webm|mkv)(\\?|$)"))
-                    | (F.col("url_overridden_by_dest").rlike(r"\\.(mp4|mov|webm|mkv)(\\?|$)"))
-                    | (F.col("url").rlike(r"(v\\.redd\\.it|youtube\\.com|youtu\\.be|streamable\\.com|twitch\\.tv|redgifs\\.com|gfycat\\.com)"))
-                    | (F.col("url_overridden_by_dest").rlike(r"(v\\.redd\\.it|youtube\\.com|youtu\\.be|streamable\\.com|twitch\\.tv|redgifs\\.com|gfycat\\.com)"))
-                    | (F.col("domain").rlike(r"(v\\.redd\\.it|youtube\\.com|youtu\\.be|streamable\\.com|twitch\\.tv|redgifs\\.com|gfycat\\.com)")),
-                    F.lit("video"),
-                )
-                .when(
-                    F.col("post_hint").isin("image")
-                    | F.col("url").rlike(r"\\.(jpg|jpeg|png|gif|webp)(\\?|$)")
-                    | F.col("url_overridden_by_dest").rlike(r"\\.(jpg|jpeg|png|gif|webp)(\\?|$)")
-                    | F.col("domain").rlike(r"(i\\.redd\\.it|imgur\\.com|flickr\\.com|images?)"),
-                    F.lit("image"),
-                )
-                .when(F.col("poll_data").isNotNull() | (F.col("post_hint") == F.lit("poll")), F.lit("poll"))
-                .when(F.length(F.col("crosspost_parent")) > 0, F.lit("crosspost"))
-                .when(
-                    (F.col("post_hint") == F.lit("link"))
-                    | ((F.length(F.col("url")) > 0) & (F.length(F.col("selftext")) == 0)),
-                    F.lit("link"),
-                )
-                .when(F.length(F.col("selftext")) > 0, F.lit("text"))
-                .otherwise(F.lit("other")),
-            )
-            .withColumn(
-                "engagement",
-                F.lit(1.0) + F.col("ups") + F.col("downs") + F.col("num_comments"),
-            )
-            .select(
-                "post_id",
-                "created_date",
-                "year",
-                "month",
-                "title",
-                "score",
-                "ups",
-                "downs",
-                "num_comments",
-                "engagement",
-                "post_type",
-            )
-            .where(F.col("created_date").isNotNull())
-            .collect()
-        )
-
-        conn.executemany(
-            """
-            INSERT INTO reddit_post_facts
-            (run_id, row_uid, post_id, created_date, year, month, title, score, ups, downs, num_comments, engagement, post_type)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            [
-                (
-                    run_id,
-                    str(uuid.uuid4()),
-                    row["post_id"],
-                    row["created_date"],
-                    int(row["year"]),
-                    int(row["month"]),
-                    row["title"],
-                    float(row["score"]),
-                    float(row["ups"]),
-                    float(row["downs"]),
-                    float(row["num_comments"]),
-                    float(row["engagement"]),
-                    str(row["post_type"]),
-                )
-                for row in facts_rows
-            ],
-        )
-        conn.commit()
-
-    spark.stop()
-    print(f"Run complete. run_id={run_id}, records_scanned={records_scanned}, db={DB_PATH}")
+    try:
+        spark.streams.awaitAnyTermination()
+    except KeyboardInterrupt:
+        print("\nStopping streams...")
+        posts_query.stop()
+        comments_query.stop()
+        spark.stop()
+        print("Done.")
 
 
 if __name__ == "__main__":

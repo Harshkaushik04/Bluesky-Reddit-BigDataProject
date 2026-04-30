@@ -1,10 +1,17 @@
 import pandas as pd
 import psycopg2
 import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load the central .env from the project root
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
+_data_dir = Path(os.getenv("BLUESKY_DATA_DIR", Path(__file__).resolve().parent.parent / "Bluesky_data")).resolve()
 
 # 1. Define paths
-file_path = "/mnt/d/Bluesky-Reddit-BigDataProject/Bluesky_data/gold/vaderSentimentAnalysisFinal"
-csv_temp_path = "/mnt/d/Bluesky-Reddit-BigDataProject/app/temp_word_series.csv"
+file_path = str(_data_dir / "gold" / "vaderSentimentAnalysisFinal")
+csv_temp_path = str(Path(__file__).resolve().parent / "temp_word_series.csv")
 
 print("1. Reading 18 million rows from Parquet (takes a few seconds)...")
 df = pd.read_parquet(file_path, engine='pyarrow')

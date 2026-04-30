@@ -2,9 +2,16 @@ import { WebSocket } from "ws";
 import { Kafka, Producer } from "kafkajs";
 import * as fs from "fs";
 import * as path from "path";
+import * as dotenv from "dotenv";
 
-const BRONZE_DIR = "/mnt/d/Bluesky-Reddit-BigDataProject/Bluesky_data/initial_firehose";
-const STREAMING_DIR = "/mnt/d/Bluesky-Reddit-BigDataProject/Bluesky_data/streaming/firehose";
+dotenv.config({ path: path.resolve(__dirname, "../.env") });
+
+const BASE_DATA_DIR = process.env.BLUESKY_DATA_DIR 
+  ? path.resolve(__dirname, "..", process.env.BLUESKY_DATA_DIR)
+  : path.resolve(__dirname, "../Bluesky_data");
+
+const BRONZE_DIR = path.join(BASE_DATA_DIR, "initial_firehose");
+const STREAMING_DIR = path.join(BASE_DATA_DIR, "streaming/firehose");
 
 [BRONZE_DIR, STREAMING_DIR].forEach((dir) => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });

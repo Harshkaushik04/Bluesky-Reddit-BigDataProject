@@ -1,3 +1,7 @@
 fastapi
 uvicorn
 pyspark
+sentence-transformers
+qdrant-client
+httpx
+python-dotenv

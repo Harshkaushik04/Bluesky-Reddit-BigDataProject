@@ -1,4 +1,4 @@
-const API_URL = "http://127.0.0.1:8000/api/reddit/overview";
+const API_URL = "http://10.116.37.242:8000/api/reddit/overview";
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const POST_TYPE_COLORS = {
   video: "#ff8a8a",
@@ -281,7 +281,7 @@ async function loadRedditDashboard() {
       "scan-info",
       `Scanned ${formatNumber(data.meta?.records_scanned || 0)} posts. Year=${filterState.year}, Months=${filterState.months.length ? filterState.months.join(",") : "all"}.`
     );
-    setText("data-mode-tag", "Mode: without streaming");
+    setText("data-mode-tag", "Mode: Real-time");
   } catch (error) {
     setText("scan-info", "Could not connect to backend or no data for selected filters.");
     console.error("Failed to load Reddit dashboard:", error);

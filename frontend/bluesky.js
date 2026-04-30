@@ -1,4 +1,4 @@
-const API_URL = "http://127.0.0.1:8000/api/bluesky/overview";
+const API_URL = "http://10.116.37.242:8000/api/bluesky/overview";
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const POST_TYPE_COLORS = {
   video: "#66b2ff",
@@ -248,7 +248,7 @@ async function loadBlueskyDashboard() {
       "scan-info",
       `Scanned ${formatNumber(data.meta?.records_scanned || 0)} events from Bluesky firehose files.`
     );
-    setText("data-mode-tag", "Mode: without streaming");
+    setText("data-mode-tag", "Mode: Real-time");
   } catch (error) {
     setText("scan-info", "Could not connect to backend or no Bluesky data found.");
     console.error("Failed to load Bluesky dashboard:", error);

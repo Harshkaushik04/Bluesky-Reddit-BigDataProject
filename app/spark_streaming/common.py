@@ -1,10 +1,16 @@
 import os
 from pathlib import Path
 from pyspark.sql import SparkSession
+from dotenv import load_dotenv
 
-BASE_DIR = Path("/mnt/d/Bluesky-Reddit-BigDataProject")
-DATA_DIR = BASE_DIR / "Bluesky_data"
+# Load the central .env from the project root
+load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
+
+BASE_DIR = Path(os.getenv("PROJECT_BASE_DIR", Path(__file__).resolve().parent.parent.parent))
+DATA_DIR = Path(os.getenv("BLUESKY_DATA_DIR", BASE_DIR / "Bluesky_data")).resolve()
+
 FIREHOSE_STREAM_DIR = DATA_DIR / "streaming" / "firehose"
+GETPOSTS_STREAM_DIR = DATA_DIR / "streaming" / "getposts"
 GOLD_DIR = DATA_DIR / "gold"
 CHECKPOINT_DIR = DATA_DIR / "checkpoints"
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")

@@ -1,0 +1,68 @@
+cd backend
+python spark_reddit_metrics.py
+uvicorn main:app --reload
+
+
+cd frontend
+npm run dev
+
+
+----------------------------------------------------
+cd reddit_yash_ki_divya
+python comments_post_producer.py
+
+
+cd backend
+python spark_reddit_metrics.py
+
+
+cd backend
+uvicorn main:app --reload
+
+cd frontend
+npm run dev
+---------------------------------
+
+cd reddit_yash_ki_divya
+venv\Scripts\activate
+cd ..\backend
+python load_historic.py
+
+
+cd reddit_yash_ki_divya
+venv\Scripts\activate
+python comments_post_producer.py
+
+
+cd reddit_yash_ki_divya
+venv\Scripts\activate
+cd ..\backend
+python spark_reddit_metrics.py
+
+
+cd backend
+uvicorn main:app --reload
+
+
+cd frontend
+npm run dev
+
+---------------
+for action just start llm on local server
+
+
+
+-----------------------
+for sentiment why
+
+in app folder 
+docker compose -f docker-compose.qdrant.yml up -d
+
+cd d:\Documents_D\HOMEWORK\6th_sem\Big_Data_AI528\project\Bluesky-Reddit-BigDataProject\backend
+python create_reddit_vectordb.py
+this was for populating vector db
+
+
+----------------for bluesky_db
+postgresql using docker
+docker compose -f docker-compose.postgres.yml up -d

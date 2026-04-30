@@ -16,11 +16,11 @@ from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, text
 
-load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env", override=True)
+load_dotenv(dotenv_path=Path(__file__).resolve().parents[3] / ".env", override=True)
 logger = logging.getLogger("backend.llm")
 
 DATABASE_URL = os.getenv(
-    "DATABASE_URL",
+    "BLUESKY_DB_URL",
     "postgresql://backend_user:supersecretpassword@localhost:5432/bluesky_db",
 )
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "http://127.0.0.1:1234/v1")
