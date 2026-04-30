@@ -3,9 +3,14 @@ import time
 import json
 import os
 from collections import deque
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load central .env
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 # 1. Configuration
-BRONZE_DIR = r"D:\Documents_D\HOMEWORK\6th_sem\Big_Data_AI528\project\Bluesky-Reddit-BigDataProject\reddit_yash_ki_divya\data"
+BRONZE_DIR = Path(os.getenv("REDDIT_DATA_DIR", Path(__file__).resolve().parent / "data")).resolve()
 POSTS_DIR = os.path.join(BRONZE_DIR, "posts")
 COMMENTS_DIR = os.path.join(BRONZE_DIR, "comments")
 POSTS_LIVE_DIR = os.path.join(BRONZE_DIR, "posts_live")
@@ -65,7 +70,7 @@ def fetch_data():
                 time.sleep(60)
                 continue
 
-            time.sleep(2)
+            time.sleep(5)
 
             # ==========================================
             # 2. FETCH AND SAVE COMMENTS
@@ -101,7 +106,7 @@ def fetch_data():
             print(f"Connection Error: {error}")
 
         # Wait before next cycle
-        time.sleep(5)
+        time.sleep(10)
 
 
 if __name__ == "__main__":

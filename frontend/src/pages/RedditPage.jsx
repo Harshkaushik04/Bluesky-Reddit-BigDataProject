@@ -69,7 +69,7 @@ export default function RedditPage() {
   useEffect(() => {
     let mounted = true;
     setError(null);
-    setLoadingPosts(true);
+    if (!data) setLoadingPosts(true); // Only show loading on first load, keep old data during refresh
 
     const fetchData = () => {
       fetchJson(apiUrl)
@@ -86,7 +86,7 @@ export default function RedditPage() {
     };
 
     fetchData();
-    const interval = setInterval(fetchData, 60000);
+    const interval = setInterval(fetchData, 30000);
 
     return () => {
       mounted = false;
@@ -115,7 +115,7 @@ export default function RedditPage() {
     };
 
     fetchData();
-    const interval = setInterval(fetchData, 60000);
+    const interval = setInterval(fetchData, 30000);
 
     return () => {
       mounted = false;
@@ -144,7 +144,7 @@ export default function RedditPage() {
     };
 
     fetchData();
-    const interval = setInterval(fetchData, 60000);
+    const interval = setInterval(fetchData, 30000);
 
     return () => {
       mounted = false;

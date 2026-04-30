@@ -1,18 +1,24 @@
+import os
+from pathlib import Path
 import pandas as pd
 from sqlalchemy import create_engine
+from dotenv import load_dotenv
 
-# 1. Connect to your native WSL PostgreSQL database
-db_url = 'postgresql://backend_user:supersecretpassword@localhost:5432/bluesky_db'
+# Load the central .env from the project root
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
+# 1. Connect to your PostgreSQL database
+db_url = os.getenv("BLUESKY_DB_URL", "postgresql://backend_user:supersecretpassword@localhost:5432/bluesky_db")
 engine = create_engine(db_url)
 
 # 2. Define the paths to your 4 Gold Parquet folders
-base_path = "/mnt/d/Bluesky-Reddit-BigDataProject/Bluesky_data/gold/"
+base_path = str(Path(os.getenv("BLUESKY_DATA_DIR", Path(__file__).resolve().parent.parent / "Bluesky_data")).resolve() / "gold")
 
 tables_to_load = {
-    "word_time_series": base_path + "vaderSentimentAnalysisFinal",
-    "ingestion_metrics_timeline": base_path + "ingestion_metrics_timeline",
-    "controversial_topics_timeline": base_path + "controversial_topics_timeline",
-    "reddit_crossover_stats": base_path + "reddit_crossover_stats"
+    "word_time_series": os.path.join(base_path, "vaderSentimentAnalysisFinal"),
+    "ingestion_metrics_timeline": os.path.join(base_path, "ingestion_metrics_timeline"),
+    "controversial_topics_timeline": os.path.join(base_path, "controversial_topics_timeline"),
+    "reddit_crossover_stats": os.path.join(base_path, "reddit_crossover_stats")
 }
 
 print("Starting database ingestion...\n")

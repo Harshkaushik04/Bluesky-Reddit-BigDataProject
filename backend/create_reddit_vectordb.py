@@ -52,15 +52,11 @@ print("Starting ingestion from SQLite...")
 conn = sqlite3.connect(DB_PATH)
 cursor = conn.cursor()
 
-# We will fetch both posts and comments
+# We will fetch only post titles (not comments, to keep it fast)
 cursor.execute("""
     SELECT 'post' as type, title as text, post_id as id, score, created_date 
     FROM reddit_post_facts 
-    WHERE title IS NOT NULL AND title != ''
-    UNION ALL
-    SELECT 'comment' as type, body as text, comment_id as id, score, created_date 
-    FROM reddit_comment_facts
-    WHERE body IS NOT NULL AND body != ''
+    WHERE title IS NOT NULL AND title != '' AND post_type != 'comment'
 """)
 
 rows = cursor.fetchall()

@@ -22,3 +22,5 @@ repomix-output.xml
 repomix-output.md
 qdrant_storage_native/
 app/mnt/
+reddit_yash_ki_divya/data/
+.env

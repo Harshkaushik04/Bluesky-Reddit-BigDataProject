@@ -16,6 +16,7 @@ from pyspark.sql.functions import (
 
 from common import (
     CHECKPOINT_DIR,
+    GETPOSTS_STREAM_DIR,
     GOLD_DIR,
     KAFKA_BOOTSTRAP_SERVERS,
     KAFKA_GETPOSTS_TOPIC,
@@ -24,7 +25,6 @@ from common import (
     build_spark,
 )
 
-GETPOSTS_STREAM_DIR = "/mnt/d/Bluesky-Reddit-BigDataProject/Bluesky_data/streaming/getposts"
 USE_KAFKA_GETPOSTS_SOURCE = os.getenv("USE_KAFKA_GETPOSTS_SOURCE", "false").lower() == "true"
 
 

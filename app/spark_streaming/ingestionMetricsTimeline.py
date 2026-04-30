@@ -11,6 +11,8 @@ from pyspark.sql.functions import (
 
 from common import (
     CHECKPOINT_DIR,
+    FIREHOSE_STREAM_DIR,
+    GETPOSTS_STREAM_DIR,
     GOLD_DIR,
     KAFKA_BOOTSTRAP_SERVERS,
     KAFKA_FIREHOSE_TOPIC,
@@ -20,8 +22,6 @@ from common import (
     build_spark,
 )
 
-GETPOSTS_STREAM_DIR = "/mnt/d/Bluesky-Reddit-BigDataProject/Bluesky_data/streaming/getposts"
-FIREHOSE_STREAM_DIR = "/mnt/d/Bluesky-Reddit-BigDataProject/Bluesky_data/streaming/firehose"
 USE_KAFKA_SOURCES = os.getenv("USE_KAFKA_SOURCES", "false").lower() == "true"
 
 
