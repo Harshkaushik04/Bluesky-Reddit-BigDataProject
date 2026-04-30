@@ -1,4 +1,5 @@
-const API_URL = "http://10.116.37.242:8000/api/reddit/overview";
+const API_ORIGIN = `${window.location.protocol === "https:" ? "https:" : "http:"}//${window.location.hostname || "localhost"}:8000`;
+const API_URL = `${API_ORIGIN}/api/reddit/overview`;
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const POST_TYPE_COLORS = {
   video: "#ff8a8a",

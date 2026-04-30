@@ -5,10 +5,10 @@ import usePageTheme from "../hooks/usePageTheme.js";
 import { formatNumber } from "../utils/format.js";
 import VolumeChart from "../components/VolumeChart.jsx";
 import PostTypePie from "../components/PostTypePie.jsx";
-import { fetchJson } from "../utils/api.js";
+import { BLUESKY_API_ORIGIN, apiUrl, fetchJson } from "../utils/api.js";
 
-const REDDIT_API_BASE = "http://10.116.37.242:8000/api/reddit/overview";
-const BLUESKY_API_BASE = "http://127.0.0.1:8001";
+const REDDIT_API_BASE = apiUrl("/api/reddit/overview");
+const BLUESKY_API_BASE = BLUESKY_API_ORIGIN;
 
 export default function ComparePage() {
   usePageTheme("comparison");

@@ -5,8 +5,9 @@ import usePageTheme from "../hooks/usePageTheme.js";
 import { formatNumber } from "../utils/format.js";
 import VolumeChart from "../components/VolumeChart.jsx";
 import PostTypePie from "../components/PostTypePie.jsx";
+import { BLUESKY_API_ORIGIN } from "../utils/api.js";
 
-const BLUESKY_API_BASE = "http://127.0.0.1:8001";
+const BLUESKY_API_BASE = BLUESKY_API_ORIGIN;
 
 export default function BlueskyPage() {
   usePageTheme("bluesky");

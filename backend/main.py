@@ -12,6 +12,7 @@ import httpx
 from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -75,6 +76,7 @@ STOPWORDS = {
     "her",
     "here",
     "him",
+    "house",
     "his",
     "how",
     "its",
@@ -674,6 +676,7 @@ def reddit_feature_insights(
                 "sentiment_kpis": {"avg_sentiment": 0.0, "positive_posts": 0, "negative_posts": 0, "neutral_posts": 0},
                 "sentiment_timeline": [],
                 "word_popularity": {"top_words": [], "timeline": []},
+                "topic_sentiment_heatmap": {"topics": [], "buckets": [], "rows": []},
                 "controversial_topics": [],
                 "trend_saturation": {"summary": [], "timeline": []},
             }
@@ -683,6 +686,13 @@ def reddit_feature_insights(
         )
         word_day_count: dict[str, Counter[str]] = defaultdict(Counter)
         word_total_count: Counter[str] = Counter()
+        word_month_sentiment: dict[str, dict[str, dict[str, float]]] = defaultdict(
+            lambda: defaultdict(lambda: {"sum_sentiment": 0.0, "count": 0.0})
+        )
+        word_sentiment_total: dict[str, float] = defaultdict(float)
+        word_engagement_total: dict[str, float] = defaultdict(float)
+        word_positive_count: Counter[str] = Counter()
+        word_negative_count: Counter[str] = Counter()
         word_controversy_total: dict[str, float] = defaultdict(float)
         word_controversy_count: Counter[str] = Counter()
 
@@ -714,10 +724,20 @@ def reddit_feature_insights(
             day_sentiment[str(created_date)]["sum_sentiment"] += sentiment_value
             day_sentiment[str(created_date)]["count"] += 1
 
+            engagement_value = float(ups or 0.0) + float(num_comments or 0.0) + max(float(score or 0.0), 0.0)
             controversy_score = float(num_comments or 0.0) / (abs(float(score or 0.0)) + 1.0)
+            month_key = str(created_date)[:7]
             for token in set(tokens):
                 word_total_count[token] += 1
                 word_day_count[token][str(created_date)] += 1
+                word_month_sentiment[token][month_key]["sum_sentiment"] += sentiment_value
+                word_month_sentiment[token][month_key]["count"] += 1
+                word_sentiment_total[token] += sentiment_value
+                word_engagement_total[token] += engagement_value
+                if sentiment_value > 0:
+                    word_positive_count[token] += 1
+                elif sentiment_value < 0:
+                    word_negative_count[token] += 1
                 word_controversy_total[token] += controversy_score
                 word_controversy_count[token] += 1
 
@@ -751,6 +771,24 @@ def reddit_feature_insights(
                 entry["total"] += value
             word_popularity_timeline.append(entry)
 
+        heatmap_topics = [token for token, _ in word_total_count.most_common(8)]
+        heatmap_months = sorted({day[:7] for day in all_days})
+        topic_sentiment_rows = []
+        for token in heatmap_topics:
+            cells = []
+            for month in heatmap_months:
+                sentiment_row = word_month_sentiment[token].get(month, {"sum_sentiment": 0.0, "count": 0.0})
+                count = int(sentiment_row["count"])
+                avg_value = sentiment_row["sum_sentiment"] / max(sentiment_row["count"], 1.0)
+                cells.append(
+                    {
+                        "bucket": month,
+                        "avg_sentiment": round(avg_value, 4),
+                        "count": count,
+                    }
+                )
+            topic_sentiment_rows.append({"topic": token, "cells": cells})
+
         controversial_topics = []
         for token, freq in word_total_count.most_common(12):
             avg_controversy = word_controversy_total[token] / max(word_controversy_count[token], 1)
@@ -763,6 +801,79 @@ def reddit_feature_insights(
             )
         controversial_topics.sort(key=lambda item: item["controversy_score"], reverse=True)
         controversial_topics = controversial_topics[:8]
+
+        opportunity_candidates = []
+        for token, freq in word_total_count.most_common(60):
+            if freq < 5:
+                continue
+            avg_sentiment_for_topic = word_sentiment_total[token] / max(freq, 1)
+            if avg_sentiment_for_topic <= 0:
+                continue
+            avg_engagement_for_topic = word_engagement_total[token] / max(freq, 1)
+            positive_rate = word_positive_count[token] / max(freq, 1)
+            opportunity_candidates.append(
+                {
+                    "topic": token,
+                    "mentions": int(freq),
+                    "avg_sentiment": avg_sentiment_for_topic,
+                    "avg_engagement": avg_engagement_for_topic,
+                    "positive_rate": positive_rate,
+                }
+            )
+        max_engagement = max((row["avg_engagement"] for row in opportunity_candidates), default=1.0) or 1.0
+        best_topics_to_post = []
+        for row in opportunity_candidates:
+            normalized_engagement = row["avg_engagement"] / max_engagement
+            opportunity_score = (row["avg_sentiment"] * 0.55) + (normalized_engagement * 0.30) + (row["positive_rate"] * 0.15)
+            best_topics_to_post.append(
+                {
+                    "topic": row["topic"],
+                    "mentions": row["mentions"],
+                    "avg_sentiment": round(row["avg_sentiment"], 4),
+                    "avg_engagement": round(row["avg_engagement"], 2),
+                    "positive_rate": round(row["positive_rate"], 3),
+                    "opportunity_score": round(opportunity_score, 4),
+                }
+            )
+        best_topics_to_post.sort(key=lambda item: item["opportunity_score"], reverse=True)
+        best_topics_to_post = best_topics_to_post[:8]
+
+        avoid_candidates = []
+        for token, freq in word_total_count.most_common(80):
+            if freq < 5:
+                continue
+            avg_sentiment_for_topic = word_sentiment_total[token] / max(freq, 1)
+            avg_controversy_for_topic = word_controversy_total[token] / max(word_controversy_count[token], 1)
+            negative_rate = word_negative_count[token] / max(freq, 1)
+            if avg_sentiment_for_topic >= 0 and negative_rate < 0.03 and avg_controversy_for_topic < 0.5:
+                continue
+            avoid_candidates.append(
+                {
+                    "topic": token,
+                    "mentions": int(freq),
+                    "avg_sentiment": avg_sentiment_for_topic,
+                    "negative_rate": negative_rate,
+                    "avg_controversy": avg_controversy_for_topic,
+                }
+            )
+        max_controversy = max((row["avg_controversy"] for row in avoid_candidates), default=1.0) or 1.0
+        topics_to_avoid = []
+        for row in avoid_candidates:
+            normalized_controversy = row["avg_controversy"] / max_controversy
+            negativity_strength = max(-row["avg_sentiment"], 0.0)
+            avoid_score = (negativity_strength * 0.45) + (row["negative_rate"] * 0.30) + (normalized_controversy * 0.25)
+            topics_to_avoid.append(
+                {
+                    "topic": row["topic"],
+                    "mentions": row["mentions"],
+                    "avg_sentiment": round(row["avg_sentiment"], 4),
+                    "negative_rate": round(row["negative_rate"], 3),
+                    "avg_controversy": round(row["avg_controversy"], 3),
+                    "avoid_score": round(avoid_score, 4),
+                }
+            )
+        topics_to_avoid.sort(key=lambda item: item["avoid_score"], reverse=True)
+        topics_to_avoid = topics_to_avoid[:8]
 
         trend_summary = []
         trend_candidates = [token for token, _ in word_total_count.most_common(25)]
@@ -841,7 +952,14 @@ def reddit_feature_insights(
                 "selected_word": requested_word or None,
                 "timeline": word_popularity_timeline,
             },
+            "topic_sentiment_heatmap": {
+                "topics": heatmap_topics,
+                "buckets": heatmap_months,
+                "rows": topic_sentiment_rows,
+            },
             "controversial_topics": controversial_topics,
+            "best_topics_to_post": best_topics_to_post,
+            "topics_to_avoid": topics_to_avoid,
             "trend_saturation": {
                 "summary": trend_summary,
                 "saturation_words": saturation_words,
@@ -1274,3 +1392,7 @@ def why_sentiments(payload: WhySentimentsRequest) -> dict[str, Any]:
         "retrieved": payload.retrieved_texts,
         "response": message
     }
+
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=8000)
