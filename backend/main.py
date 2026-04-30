@@ -8,6 +8,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import httpx
+from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -953,3 +955,78 @@ def bluesky_overview(
         "timeline": timeline,
         "timeline_series": timeline_series,
     }
+
+class ActionRecommendRequest(BaseModel):
+    sentence: str
+
+def deterministic_action_recommendation(avg_score: float, neg_frac: float, min_score: float) -> str:
+    if avg_score <= -0.05 or neg_frac >= 0.40 or min_score <= -0.25:
+        return (
+            "Recommendation: Do not post - rule 1 triggered "
+            f"(avg_score={avg_score:.4f}, neg_frac={neg_frac:.2f}, min_score={min_score:.4f})."
+        )
+    return (
+        "Recommendation: Post - rule 2 triggered "
+        f"(avg_score={avg_score:.4f}, neg_frac={neg_frac:.2f}, min_score={min_score:.4f})."
+    )
+
+@app.post("/api/reddit/action-recommend")
+def action_recommend(payload: ActionRecommendRequest) -> dict[str, str]:
+    words = [w.strip(".,!?;:()[]{}\"'_").lower() for w in payload.sentence.split() if w.strip()]
+    if not words:
+        raise HTTPException(status_code=400, detail="Sentence must include at least one word.")
+
+    scores = []
+    sentiment_lines = []
+    for w in words:
+        if w in POSITIVE_WORDS:
+            score = 1.0
+        elif w in NEGATIVE_WORDS:
+            score = -1.0
+        else:
+            score = 0.0
+        scores.append(score)
+        sentiment_lines.append(f"- {w}: {score:.4f}")
+
+    avg_score = sum(scores) / max(len(scores), 1)
+    neg_frac = sum(1 for s in scores if s < 0.0) / max(len(scores), 1)
+    min_score = min(scores) if scores else 0.0
+
+    user_prompt = (
+        "You are a deterministic classifier. Your ONLY job is to output one of two labels: Post or Do not post.\n"
+        "You MUST base your decision ONLY on the provided sentiment scores and the computed aggregates.\n"
+        "Do NOT use any world knowledge, topic intuition, safety policy, or assumptions about the text beyond the scores.\n"
+        "Treat any missing word sentiment as exactly 0.0 (neutral).\n\n"
+        "Definitions:\n"
+        "- Score range: [-1.0, 1.0]; 0.0 is neutral.\n"
+        "- avg_score: average of all word scores in the sentence (including 0.0 for unknowns).\n"
+        "- neg_frac: fraction of words with score < 0.0.\n\n"
+        "Decision rules (apply in order):\n"
+        "1) If avg_score <= -0.05 OR neg_frac >= 0.40 OR min_score <= -0.25 => Do not post\n"
+        "2) Else => Post\n\n"
+        f"Sentence: {payload.sentence}\n"
+        f"Computed aggregates: avg_score={avg_score:.4f}, neg_frac={neg_frac:.2f}, min_score={min_score:.4f}\n"
+        "Word sentiments:\n"
+        + "\n".join(sentiment_lines)
+        + "\n\nOutput format (exactly one line):\nRecommendation: <Post/Do not post> - <must mention which rule triggered and the aggregates>"
+    )
+
+    llm_payload = {
+        "model": "local-model",
+        "messages": [{"role": "user", "content": user_prompt}],
+        "temperature": 0.0,
+        "max_tokens": 200,
+    }
+
+    try:
+        with httpx.Client(base_url="http://localhost:1234/v1", timeout=5.0) as client:
+            response = client.post("/chat/completions", json=llm_payload)
+            response.raise_for_status()
+            data = response.json()
+            text_out = data["choices"][0]["message"]["content"].strip()
+            if "recommendation:" not in text_out.lower():
+                return {"response": deterministic_action_recommendation(avg_score, neg_frac, min_score)}
+            return {"response": text_out}
+    except Exception as exc:
+        print(f"LLM request failed: {exc}. Using deterministic fallback.")
+        return {"response": deterministic_action_recommendation(avg_score, neg_frac, min_score)}

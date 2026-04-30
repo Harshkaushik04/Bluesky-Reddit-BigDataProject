@@ -10,6 +10,7 @@ import PostTypePie from "../components/PostTypePie.jsx";
 const API_BASE = "http://127.0.0.1:8000/api/reddit/overview";
 const COMMENTS_API_BASE = "http://127.0.0.1:8000/api/reddit/comments/overview";
 const FEATURES_API_BASE = "http://127.0.0.1:8000/api/reddit/feature-insights";
+const RECOMMEND_API_BASE = "http://127.0.0.1:8000/api/reddit/action-recommend";
 
 export default function RedditPage() {
   usePageTheme("reddit");
@@ -30,6 +31,10 @@ export default function RedditPage() {
   const [visibleCommentPoints, setVisibleCommentPoints] = useState(0);
   const [visibleFeaturePoints, setVisibleFeaturePoints] = useState(0);
   const [error, setError] = useState(null);
+
+  const [actionSentence, setActionSentence] = useState("");
+  const [actionResult, setActionResult] = useState(null);
+  const [actionLoading, setActionLoading] = useState(false);
 
   const apiUrl = useMemo(() => {
     const url = new URL(API_BASE);
@@ -138,6 +143,29 @@ export default function RedditPage() {
       clearInterval(interval);
     };
   }, [activeSection, featuresApiUrl]);
+
+  const handleRecommendAction = async (e) => {
+    e.preventDefault();
+    if (!actionSentence.trim()) return;
+    setActionLoading(true);
+    setActionResult(null);
+    try {
+      const response = await fetch(RECOMMEND_API_BASE, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sentence: actionSentence }),
+      });
+      if (!response.ok) {
+        throw new Error("Failed to get recommendation.");
+      }
+      const json = await response.json();
+      setActionResult(json.response);
+    } catch (err) {
+      setActionResult("Error: " + err.message);
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   const kpis = data?.kpis || {};
   const split = data?.content_split || {};
@@ -271,6 +299,13 @@ export default function RedditPage() {
                 onClick={() => setActiveSection("advanced")}
               >
                 Advanced Features
+              </button>
+              <button
+                type="button"
+                className={`side-btn ${activeSection === "action-recommender" ? "active" : ""}`}
+                onClick={() => setActiveSection("action-recommender")}
+              >
+                Action Recommender
               </button>
             </div>
           </aside>
@@ -790,6 +825,71 @@ export default function RedditPage() {
                       </div>
                     ) : (
                       <p>No trend saturation data.</p>
+                    )}
+                  </article>
+                </section>
+              </>
+            ) : activeSection === "action-recommender" ? (
+              <>
+                <section className="hero-board">
+                  <div className="hero-head">
+                    <h1>ACTION RECOMMENDER</h1>
+                    <span className="tag">Mode: Deterministic / LLM</span>
+                  </div>
+                  <p className="hero-sub">Enter a proposed post title to see if it should be posted based on historical sentiment.</p>
+                </section>
+                <section className="analytics-grid" style={{ gridTemplateColumns: "1fr" }}>
+                  <article className="panel">
+                    <h3>Propose a Post</h3>
+                    <form onSubmit={handleRecommendAction} style={{ display: "flex", flexDirection: "column", gap: "16px", marginTop: "16px" }}>
+                      <textarea
+                        value={actionSentence}
+                        onChange={(e) => setActionSentence(e.target.value)}
+                        placeholder="Type your Reddit post title here..."
+                        rows={4}
+                        style={{
+                          width: "100%",
+                          padding: "12px",
+                          borderRadius: "8px",
+                          border: "1px solid rgba(255,255,255,0.1)",
+                          background: "rgba(0,0,0,0.2)",
+                          color: "#fff",
+                          fontSize: "1rem",
+                          fontFamily: "inherit",
+                          resize: "vertical"
+                        }}
+                      />
+                      <button
+                        type="submit"
+                        disabled={actionLoading || !actionSentence.trim()}
+                        style={{
+                          alignSelf: "flex-start",
+                          padding: "10px 24px",
+                          borderRadius: "8px",
+                          border: "none",
+                          background: "#ff4d67",
+                          color: "#fff",
+                          fontWeight: 600,
+                          cursor: (actionLoading || !actionSentence.trim()) ? "not-allowed" : "pointer",
+                          opacity: (actionLoading || !actionSentence.trim()) ? 0.6 : 1
+                        }}
+                      >
+                        {actionLoading ? "Analyzing..." : "Recommend"}
+                      </button>
+                    </form>
+                    
+                    {actionResult && (
+                      <div style={{
+                        marginTop: "24px",
+                        padding: "16px",
+                        borderRadius: "8px",
+                        background: actionResult.startsWith("Error") ? "rgba(255,77,103,0.1)" : "rgba(255,255,255,0.05)",
+                        border: `1px solid ${actionResult.startsWith("Error") ? "rgba(255,77,103,0.3)" : "rgba(255,255,255,0.1)"}`,
+                        whiteSpace: "pre-wrap"
+                      }}>
+                        <h4 style={{ margin: "0 0 12px 0", color: "#fff" }}>Recommendation Result:</h4>
+                        <p style={{ margin: 0, lineHeight: 1.5, color: "#d8deee" }}>{actionResult}</p>
+                      </div>
                     )}
                   </article>
                 </section>
