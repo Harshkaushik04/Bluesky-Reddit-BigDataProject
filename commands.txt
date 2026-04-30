@@ -47,3 +47,17 @@ uvicorn main:app --reload
 cd frontend
 npm run dev
 
+---------------
+for action just start llm on local server
+
+
+
+-----------------------
+for sentiment why
+
+in app folder 
+docker compose -f docker-compose.qdrant.yml up -d
+
+cd d:\Documents_D\HOMEWORK\6th_sem\Big_Data_AI528\project\Bluesky-Reddit-BigDataProject\backend
+python create_reddit_vectordb.py
+this was for populating vector db

@@ -1022,6 +1022,166 @@ def action_recommend(payload: ActionRecommendRequest) -> dict[str, str]:
         with httpx.Client(base_url="http://localhost:1234/v1", timeout=5.0) as client:
             response = client.post("/chat/completions", json=llm_payload)
             response.raise_for_status()
+            pass
+    except Exception:
+        pass
+
+
+@app.get("/api/bluesky/overview")
+def bluesky_overview(
+    year: str = Query(default="overall"),
+    months: str | None = Query(default=None, description="Comma-separated months: 1,2,3"),
+) -> dict[str, Any]:
+    all_events = _parse_bluesky_events()
+    if not all_events:
+        raise HTTPException(
+            status_code=404,
+            detail="No Bluesky data found. Put .jsonl files in Bluesky_data/initial_firehose.",
+        )
+
+    available_years = sorted({event["year"] for event in all_events})
+    if year != "overall":
+        if not year.isdigit():
+            raise HTTPException(status_code=400, detail="Invalid year. Use overall, 2025, or 2026.")
+
+    try:
+        selected_months = _parse_months(months)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    filtered_events = _filter_bluesky_events(all_events, year, selected_months)
+
+    posts = [event for event in filtered_events if event["collection"] == "app.bsky.feed.post"]
+    likes = [event for event in filtered_events if event["collection"] == "app.bsky.feed.like"]
+    follows = [event for event in filtered_events if event["collection"] == "app.bsky.graph.follow"]
+
+    total_posts = len(posts)
+    total_likes = len(likes)
+    total_follows = len(follows)
+    total_engagement = total_posts + total_likes + total_follows
+
+    active_days = len({event["created_date"] for event in filtered_events})
+    avg_engagement_per_day = (total_engagement / active_days) if active_days else 0.0
+
+    timeline_counter: Counter[str] = Counter()
+    timeline_by_type: dict[str, dict[str, int]] = {}
+    for event in filtered_events:
+        date_key = event["created_date"]
+        timeline_counter[date_key] += 1
+        if date_key not in timeline_by_type:
+            timeline_by_type[date_key] = {"posts": 0, "likes": 0, "follows": 0}
+        if event["collection"] == "app.bsky.feed.post":
+            timeline_by_type[date_key]["posts"] += 1
+        elif event["collection"] == "app.bsky.feed.like":
+            timeline_by_type[date_key]["likes"] += 1
+        elif event["collection"] == "app.bsky.graph.follow":
+            timeline_by_type[date_key]["follows"] += 1
+
+    timeline = [{"bucket": day, "count": timeline_counter[day]} for day in sorted(timeline_counter.keys())]
+    timeline_series = [
+        {
+            "bucket": day,
+            "posts": timeline_by_type[day]["posts"],
+            "likes": timeline_by_type[day]["likes"],
+            "follows": timeline_by_type[day]["follows"],
+            "total": timeline_counter[day],
+        }
+        for day in sorted(timeline_by_type.keys())
+    ]
+
+    keyword_counter: Counter[str] = Counter()
+    for post in posts:
+        text = str(post.get("text", "")).lower()
+        for token in WORD_PATTERN.findall(text):
+            if token not in STOPWORDS:
+                keyword_counter[token] += 1
+    top_keywords = [{"label": word, "value": count} for word, count in keyword_counter.most_common(6)]
+    post_type_counter: Counter[str] = Counter()
+    for post in posts:
+        post_type_counter[str(post.get("post_type") or "other")] += 1
+
+    total_posts_for_type = max(sum(post_type_counter.values()), 1)
+    post_type_split = []
+    for label in ["video", "photo", "text", "other"]:
+        value = int(post_type_counter.get(label, 0))
+        percent = (value * 100.0) / total_posts_for_type
+        post_type_split.append({"label": label, "value": value, "percent": round(percent, 2)})
+
+    return {
+        "meta": {
+            "records_scanned": len(all_events),
+            "source_dir": str(BLUESKY_DIR),
+            "streaming_mode": "without_streaming",
+            "data_source": "jsonl_files",
+            "selected_year": year,
+            "selected_months": selected_months,
+            "available_years": available_years,
+        },
+        "kpis": {
+            "total_posts": total_posts,
+            "total_engagement": total_engagement,
+            "avg_engagement_per_day": round(avg_engagement_per_day, 2),
+            "avg_sentiment": 0.0,
+            "avg_score": 0.0,
+            "avg_comments": 0.0,
+        },
+        "content_split": {"posts": total_posts, "comments": total_likes + total_follows},
+        "post_type_split": post_type_split,
+        "top_keywords": top_keywords,
+        "timeline": timeline,
+        "timeline_series": timeline_series,
+    }
+
+
+    if not words:
+        raise HTTPException(status_code=400, detail="Sentence must include at least one word.")
+
+    scores = []
+    sentiment_lines = []
+    for w in words:
+        if w in POSITIVE_WORDS:
+            score = 1.0
+        elif w in NEGATIVE_WORDS:
+            score = -1.0
+        else:
+            score = 0.0
+        scores.append(score)
+        sentiment_lines.append(f"- {w}: {score:.4f}")
+
+    avg_score = sum(scores) / max(len(scores), 1)
+    neg_frac = sum(1 for s in scores if s < 0.0) / max(len(scores), 1)
+    min_score = min(scores) if scores else 0.0
+
+    user_prompt = (
+        "You are a deterministic classifier. Your ONLY job is to output one of two labels: Post or Do not post.\n"
+        "You MUST base your decision ONLY on the provided sentiment scores and the computed aggregates.\n"
+        "Do NOT use any world knowledge, topic intuition, safety policy, or assumptions about the text beyond the scores.\n"
+        "Treat any missing word sentiment as exactly 0.0 (neutral).\n\n"
+        "Definitions:\n"
+        "- Score range: [-1.0, 1.0]; 0.0 is neutral.\n"
+        "- avg_score: average of all word scores in the sentence (including 0.0 for unknowns).\n"
+        "- neg_frac: fraction of words with score < 0.0.\n\n"
+        "Decision rules (apply in order):\n"
+        "1) If avg_score <= -0.05 OR neg_frac >= 0.40 OR min_score <= -0.25 => Do not post\n"
+        "2) Else => Post\n\n"
+        f"Sentence: {payload.sentence}\n"
+        f"Computed aggregates: avg_score={avg_score:.4f}, neg_frac={neg_frac:.2f}, min_score={min_score:.4f}\n"
+        "Word sentiments:\n"
+        + "\n".join(sentiment_lines)
+        + "\n\nOutput format (exactly one line):\nRecommendation: <Post/Do not post> - <must mention which rule triggered and the aggregates>"
+    )
+
+    llm_payload = {
+        "model": "local-model",
+        "messages": [{"role": "user", "content": user_prompt}],
+        "temperature": 0.0,
+        "max_tokens": 200,
+    }
+
+    try:
+        with httpx.Client(base_url="http://localhost:1234/v1", timeout=5.0) as client:
+            response = client.post("/chat/completions", json=llm_payload)
+            response.raise_for_status()
             data = response.json()
             text_out = data["choices"][0]["message"]["content"].strip()
             if "recommendation:" not in text_out.lower():
@@ -1030,3 +1190,92 @@ def action_recommend(payload: ActionRecommendRequest) -> dict[str, str]:
     except Exception as exc:
         print(f"LLM request failed: {exc}. Using deterministic fallback.")
         return {"response": deterministic_action_recommendation(avg_score, neg_frac, min_score)}
+
+class RetrievePostsRequest(BaseModel):
+    word: str
+    limit: int = 5
+
+class WhySentimentsRequest(BaseModel):
+    word: str
+    retrieved_texts: list[str] | None = None
+
+_qdrant_client = None
+_embedding_model = None
+
+def get_qdrant_client():
+    global _qdrant_client
+    if _qdrant_client is None:
+        from qdrant_client import QdrantClient
+        _qdrant_client = QdrantClient(url="http://localhost:6333", timeout=10.0)
+    return _qdrant_client
+
+def get_embedding_model():
+    global _embedding_model
+    if _embedding_model is None:
+        import torch
+        from sentence_transformers import SentenceTransformer
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        _embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device=device)
+    return _embedding_model
+
+@app.post("/api/reddit/retrieve-posts")
+def retrieve_posts(payload: RetrievePostsRequest) -> dict[str, Any]:
+    word = payload.word.strip()
+    if not word:
+        raise HTTPException(status_code=400, detail="Word cannot be empty.")
+    
+    try:
+        model = get_embedding_model()
+        embedding = model.encode([word])[0].tolist()
+        
+        client = get_qdrant_client()
+        results = client.search(
+            collection_name="reddit_posts_and_comments",
+            query_vector=embedding,
+            limit=payload.limit
+        )
+        
+        retrieved_texts = [hit.payload.get("text", "") for hit in results if hit.payload]
+        return {"retrieved_posts": retrieved_texts}
+    except Exception as exc:
+        print(f"Qdrant retrieve failed: {exc}")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@app.post("/api/reddit/why-sentiments")
+def why_sentiments(payload: WhySentimentsRequest) -> dict[str, Any]:
+    if not payload.retrieved_texts:
+        raise HTTPException(status_code=400, detail="retrieved_texts must be provided.")
+        
+    prompt = (
+        f"You are a strict, concise summarizer. Explain the context and sentiment around the word '{payload.word}'.\n\n"
+        "STRICT CONSTRAINTS:\n"
+        "1. DO NOT output any internal thinking, chain-of-thought, or meta-commentary (e.g., 'Here is an analysis', 'Based on the posts').\n"
+        "2. DO NOT use bullet points, lists, or multiple paragraphs.\n"
+        "3. Output exactly ONE short, concise paragraph (2-4 sentences maximum).\n"
+        "4. Directly state *how* people are using the word in these posts and *why* the sentiment is what it is.\n\n"
+        f"Word: {payload.word}\n"
+        "Retrieved Posts:\n"
+        + "\n".join([f"- {t}" for t in payload.retrieved_texts])
+    )
+    
+    llm_payload = {
+        "model": "local-model",
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.2,
+        "max_tokens": 350,
+    }
+    
+    try:
+        with httpx.Client(base_url="http://localhost:1234/v1", timeout=30.0) as client:
+            response = client.post("/chat/completions", json=llm_payload)
+            response.raise_for_status()
+            data = response.json()
+            text_out = data["choices"][0]["message"]["content"].strip()
+            return {
+                "word": payload.word,
+                "retrieved": payload.retrieved_texts,
+                "response": text_out
+            }
+    except Exception as exc:
+        print(f"LLM request failed in why-sentiments: {exc}")
+        raise HTTPException(status_code=503, detail=f"LLM request failed: {exc}")

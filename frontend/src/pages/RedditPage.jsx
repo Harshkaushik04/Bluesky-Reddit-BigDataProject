@@ -11,6 +11,8 @@ const API_BASE = "http://127.0.0.1:8000/api/reddit/overview";
 const COMMENTS_API_BASE = "http://127.0.0.1:8000/api/reddit/comments/overview";
 const FEATURES_API_BASE = "http://127.0.0.1:8000/api/reddit/feature-insights";
 const RECOMMEND_API_BASE = "http://127.0.0.1:8000/api/reddit/action-recommend";
+const RETRIEVE_API_BASE = "http://127.0.0.1:8000/api/reddit/retrieve-posts";
+const WHY_API_BASE = "http://127.0.0.1:8000/api/reddit/why-sentiments";
 
 export default function RedditPage() {
   usePageTheme("reddit");
@@ -35,6 +37,12 @@ export default function RedditPage() {
   const [actionSentence, setActionSentence] = useState("");
   const [actionResult, setActionResult] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
+
+  const [whyWordInput, setWhyWordInput] = useState("");
+  const [retrievedPosts, setRetrievedPosts] = useState([]);
+  const [whyExplanation, setWhyExplanation] = useState(null);
+  const [retrieveLoading, setRetrieveLoading] = useState(false);
+  const [whyLoading, setWhyLoading] = useState(false);
 
   const apiUrl = useMemo(() => {
     const url = new URL(API_BASE);
@@ -164,6 +172,48 @@ export default function RedditPage() {
       setActionResult("Error: " + err.message);
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleRetrievePosts = async (e) => {
+    e.preventDefault();
+    if (!whyWordInput.trim()) return;
+    setRetrieveLoading(true);
+    setRetrievedPosts([]);
+    setWhyExplanation(null);
+    try {
+      const response = await fetch(RETRIEVE_API_BASE, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ word: whyWordInput.trim(), limit: 5 }),
+      });
+      if (!response.ok) throw new Error("Retrieve failed");
+      const json = await response.json();
+      setRetrievedPosts(json.retrieved_posts || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setRetrieveLoading(false);
+    }
+  };
+
+  const handleWhySentiment = async () => {
+    if (!whyWordInput.trim() || retrievedPosts.length === 0) return;
+    setWhyLoading(true);
+    setWhyExplanation(null);
+    try {
+      const response = await fetch(WHY_API_BASE, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ word: whyWordInput.trim(), retrieved_texts: retrievedPosts }),
+      });
+      if (!response.ok) throw new Error("Explain failed");
+      const json = await response.json();
+      setWhyExplanation(json.response);
+    } catch (err) {
+      setWhyExplanation("Error: " + err.message);
+    } finally {
+      setWhyLoading(false);
     }
   };
 
@@ -306,6 +356,13 @@ export default function RedditPage() {
                 onClick={() => setActiveSection("action-recommender")}
               >
                 Action Recommender
+              </button>
+              <button
+                type="button"
+                className={`side-btn ${activeSection === "why-sentiments" ? "active" : ""}`}
+                onClick={() => setActiveSection("why-sentiments")}
+              >
+                Why Sentiments
               </button>
             </div>
           </aside>
@@ -889,6 +946,119 @@ export default function RedditPage() {
                       }}>
                         <h4 style={{ margin: "0 0 12px 0", color: "#fff" }}>Recommendation Result:</h4>
                         <p style={{ margin: 0, lineHeight: 1.5, color: "#d8deee" }}>{actionResult}</p>
+                      </div>
+                    )}
+                  </article>
+                </section>
+              </>
+            ) : activeSection === "why-sentiments" ? (
+              <>
+                <section className="hero-board">
+                  <div className="hero-head">
+                    <h1>WHY SENTIMENTS</h1>
+                    <span className="tag">Mode: Vector Search + LLM</span>
+                  </div>
+                  <p className="hero-sub">Type a word to retrieve its exact context from the Reddit database using Qdrant, then let the LLM explain why it has that sentiment.</p>
+                </section>
+                <section className="analytics-grid" style={{ gridTemplateColumns: "1fr" }}>
+                  <article className="panel">
+                    <h3>Analyze Word Context</h3>
+                    
+                    <form onSubmit={handleRetrievePosts} style={{ display: "flex", gap: "12px", marginTop: "16px", flexWrap: "wrap" }}>
+                      <input
+                        type="text"
+                        value={whyWordInput}
+                        onChange={(e) => setWhyWordInput(e.target.value)}
+                        placeholder="e.g. people, crypto, politics..."
+                        style={{
+                          flex: 1,
+                          minWidth: "200px",
+                          padding: "10px 14px",
+                          borderRadius: "8px",
+                          border: "1px solid rgba(255,255,255,0.1)",
+                          background: "rgba(0,0,0,0.2)",
+                          color: "#fff",
+                          fontSize: "1rem"
+                        }}
+                      />
+                      <button
+                        type="submit"
+                        disabled={retrieveLoading || !whyWordInput.trim()}
+                        style={{
+                          padding: "10px 20px",
+                          borderRadius: "8px",
+                          border: "1px solid #7c8cd8",
+                          background: "rgba(124,140,216,0.1)",
+                          color: "#7c8cd8",
+                          fontWeight: 600,
+                          cursor: (retrieveLoading || !whyWordInput.trim()) ? "not-allowed" : "pointer",
+                          opacity: (retrieveLoading || !whyWordInput.trim()) ? 0.6 : 1
+                        }}
+                      >
+                        {retrieveLoading ? "Searching VectorDB..." : "Retrieve Posts"}
+                      </button>
+                    </form>
+
+                    {retrievedPosts.length > 0 && (
+                      <div style={{ marginTop: "24px" }}>
+                        <h4 style={{ color: "#d8deee", marginBottom: "12px" }}>Retrieved Context ({retrievedPosts.length} posts found)</h4>
+                        <ul style={{ 
+                          listStyle: "none", 
+                          padding: 0, 
+                          margin: "0 0 20px 0",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "8px"
+                        }}>
+                          {retrievedPosts.map((post, i) => (
+                            <li key={i} style={{
+                              padding: "10px 14px",
+                              background: "rgba(0,0,0,0.2)",
+                              borderRadius: "6px",
+                              borderLeft: "3px solid #7c8cd8",
+                              color: "#a4b1cd",
+                              fontSize: "0.9rem",
+                              lineHeight: 1.4
+                            }}>
+                              "{post}"
+                            </li>
+                          ))}
+                        </ul>
+
+                        <button
+                          type="button"
+                          onClick={handleWhySentiment}
+                          disabled={whyLoading}
+                          style={{
+                            padding: "10px 24px",
+                            borderRadius: "8px",
+                            border: "none",
+                            background: "#ff4d67",
+                            color: "#fff",
+                            fontWeight: 600,
+                            cursor: whyLoading ? "not-allowed" : "pointer",
+                            opacity: whyLoading ? 0.6 : 1
+                          }}
+                        >
+                          {whyLoading ? "LLM Summarizing..." : "Explain Sentiment Context"}
+                        </button>
+                      </div>
+                    )}
+
+                    {whyExplanation && (
+                      <div style={{
+                        marginTop: "24px",
+                        padding: "20px",
+                        borderRadius: "8px",
+                        background: whyExplanation.startsWith("Error") ? "rgba(255,77,103,0.1)" : "rgba(124,140,216,0.1)",
+                        border: `1px solid ${whyExplanation.startsWith("Error") ? "rgba(255,77,103,0.3)" : "rgba(124,140,216,0.3)"}`,
+                      }}>
+                        <h4 style={{ margin: "0 0 12px 0", color: "#fff", display: "flex", alignItems: "center", gap: "8px" }}>
+                          <span style={{ fontSize: "1.2rem" }}>✨</span> LLM Insight:
+                        </h4>
+                        <p style={{ margin: 0, lineHeight: 1.6, color: "#d8deee", fontSize: "0.95rem", whiteSpace: "pre-wrap" }}>
+                          {whyExplanation}
+                        </p>
                       </div>
                     )}
                   </article>

@@ -10,5 +10,5 @@ services:
       - "6333:6333"
       - "6334:6334"
     volumes:
-      - /mnt/d/Bluesky-Reddit-BigDataProject/Bluesky_data/qdrant/qdrant_storage:/qdrant/storage
-      - /mnt/d/Bluesky-Reddit-BigDataProject/Bluesky_data/qdrant/qdrant_config:/qdrant/config
+      - ../Bluesky_data/qdrant/qdrant_storage:/qdrant/storage
+      - ../Bluesky_data/qdrant/qdrant_config:/qdrant/config
