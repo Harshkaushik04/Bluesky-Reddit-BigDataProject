@@ -72,6 +72,82 @@ function PostRecommendationGauge({ result }) {
   );
 }
 
+function WordSentimentEngagementScatter({ data, loading }) {
+  const rows = (data || []).filter((row) => row.word);
+
+  if (!rows.length) {
+    return <p>{loading ? "Loading word sentiment and engagement data..." : "No word scatter data available."}</p>;
+  }
+
+  const maxEngagement = Math.max(...rows.map((row) => Number(row.avg_engagement || 0)), 1);
+  const sentimentScale = 90;
+  const sentiments = rows.map((row) => Number(row.avg_sentiment || 0) * sentimentScale);
+  const minSentiment = Math.min(...sentiments);
+  const maxSentiment = Math.max(...sentiments);
+  const sentimentRange = maxSentiment - minSentiment;
+  const neutralY =
+    sentimentRange === 0 ? 50 : Math.min(Math.max(((0 - minSentiment) / sentimentRange) * 86 + 7, 7), 93);
+  const sentimentTicks = [
+    { label: maxSentiment.toFixed(2), bottom: 93 },
+    { label: "0.00", bottom: neutralY },
+    { label: minSentiment.toFixed(2), bottom: 7 },
+  ];
+
+  return (
+    <div className="word-scatter">
+      <div className="scatter-y-label">Sentiment score</div>
+      <div className="scatter-y-ticks">
+        {sentimentTicks.map((tick) => (
+          <span key={`${tick.label}-${tick.bottom}`} style={{ bottom: `${tick.bottom}%` }}>
+            {tick.label}
+          </span>
+        ))}
+      </div>
+      <div className="scatter-plot" role="img" aria-label="Words by sentiment score and engagement scatter plot">
+        <div className="scatter-axis scatter-axis-x" />
+        <div className="scatter-axis scatter-axis-y" />
+        <div className="scatter-axis scatter-axis-neutral" style={{ bottom: `${neutralY}%` }} />
+        {rows.map((row) => {
+          const sentiment = Number(row.avg_sentiment || 0);
+          const plottedSentiment = sentiment * sentimentScale;
+          const engagement = Number(row.avg_engagement || 0);
+          const mentions = Number(row.mentions || 0);
+          const wordHash = String(row.word)
+            .split("")
+            .reduce((sum, char) => sum + char.charCodeAt(0), 0);
+          const jitter = ((wordHash % 7) - 3) * 0.45;
+          const x = Math.min(Math.max((engagement / maxEngagement) * 90 + 5 + jitter, 3), 97);
+          const normalizedY = sentimentRange === 0 ? 50 : ((plottedSentiment - minSentiment) / sentimentRange) * 86 + 7;
+          const y = Math.min(Math.max(normalizedY + jitter, 3), 97);
+          const size = Math.min(Math.max(4 + mentions * 0.12, 5), 11);
+
+          return (
+            <div
+              key={row.word}
+              className={`scatter-point ${sentiment < 0 ? "negative" : sentiment > 0 ? "positive" : "neutral"}`}
+              style={{
+                left: `${x}%`,
+                bottom: `${y}%`,
+                width: `${size}px`,
+                height: `${size}px`
+              }}
+              title={`${row.word}: sentiment ${plottedSentiment.toFixed(3)} (${sentiment.toFixed(4)} x 90), engagement ${formatNumber(engagement)}, mentions ${formatNumber(mentions)}`}
+            >
+              <span>{row.word}</span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="scatter-x-label">Engagement</div>
+      <div className="scatter-scale">
+        <span>0</span>
+        <span>{formatNumber(maxEngagement)}</span>
+      </div>
+      <p className="scatter-note">Top frequent words shown; words with fewer than 3 mentions are excluded.</p>
+    </div>
+  );
+}
+
 export default function RedditPage() {
   usePageTheme("reddit");
 
@@ -303,6 +379,7 @@ export default function RedditPage() {
   const sentimentKpis = featureData?.sentiment_kpis || {};
   const controversialTopics = featureData?.controversial_topics || [];
   const bestTopicsToPost = featureData?.best_topics_to_post || [];
+  const wordSentimentEngagement = featureData?.word_sentiment_engagement || [];
   const topicsToAvoid = featureData?.topics_to_avoid || [];
   const trendSummary = featureData?.trend_saturation?.summary || [];
   const trendSeriesByWord = featureData?.trend_saturation?.series_by_word || {};
@@ -880,6 +957,13 @@ export default function RedditPage() {
                       colorB={{ area: "rgba(255,77,103,0.0)", line: "transparent" }}
                       colorC={{ area: "rgba(125,61,69,0.0)", line: "transparent" }}
                     />
+                  </article>
+                </section>
+
+                <section className="analytics-grid" style={{ gridTemplateColumns: "1fr" }}>
+                  <article className="panel">
+                    <h3>Words: Sentiment Score vs Engagement</h3>
+                    <WordSentimentEngagementScatter data={wordSentimentEngagement} loading={loadingFeatures} />
                   </article>
                 </section>
 

@@ -703,6 +703,134 @@ a { color: inherit; text-decoration: none; }
   box-shadow: 0 0 16px rgba(239, 68, 68, 0.36);
 }
 
+.word-scatter {
+  display: grid;
+  grid-template-columns: 24px 42px 1fr;
+  grid-template-rows: 280px auto auto auto;
+  gap: 6px 8px;
+  margin-top: 10px;
+}
+
+.scatter-y-label {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  align-self: center;
+  justify-self: center;
+  color: #9fb3d7;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.scatter-y-ticks {
+  position: relative;
+  color: #c7cfdf;
+  font-size: 0.68rem;
+}
+
+.scatter-y-ticks span {
+  position: absolute;
+  right: 0;
+  transform: translateY(50%);
+}
+
+.scatter-plot {
+  position: relative;
+  min-height: 280px;
+  overflow: hidden;
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(12, 17, 28, 0.9), rgba(9, 13, 22, 0.9));
+  background-size: 100% 25%, 25% 100%, 100% 100%;
+}
+
+.scatter-axis {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.scatter-axis-x {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+}
+
+.scatter-axis-y {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+}
+
+.scatter-axis-neutral {
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.scatter-point {
+  position: absolute;
+  border-radius: 50%;
+  transform: translate(-50%, 50%);
+}
+
+.scatter-point.positive {
+  background: linear-gradient(135deg, #5cff9d 0%, #22c55e 55%, #12d8a7 100%);
+  box-shadow: 0 0 18px rgba(34, 197, 94, 0.34);
+}
+
+.scatter-point.negative {
+  background: linear-gradient(135deg, #ff9f43 0%, #ef4444 55%, #ff2d75 100%);
+  box-shadow: 0 0 18px rgba(239, 68, 68, 0.34);
+}
+
+.scatter-point.neutral {
+  background: linear-gradient(135deg, #a7b2c8 0%, #64748b 100%);
+  box-shadow: 0 0 18px rgba(148, 163, 184, 0.24);
+}
+
+.scatter-point span {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 5px);
+  max-width: 90px;
+  transform: translateX(-50%);
+  color: #d8deee;
+  font-size: 0.68rem;
+  line-height: 1.1;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scatter-x-label {
+  grid-column: 3;
+  justify-self: center;
+  color: #9fb3d7;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.scatter-scale {
+  grid-column: 3;
+  display: flex;
+  justify-content: space-between;
+  color: #c7cfdf;
+  font-size: 0.7rem;
+}
+
+.scatter-note {
+  grid-column: 3;
+  margin: 0;
+  color: #9fb3d7;
+  font-size: 0.72rem;
+}
+
 .post-type-pie {
   width: 170px;
   height: 170px;

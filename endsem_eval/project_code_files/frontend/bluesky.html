@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bluesky Dashboard</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body class="page-shell" data-theme="bluesky">
+  <nav class="top-nav">
+    <div class="brand">AI528 <span>Bluesky Analytics</span></div>
+    <div class="nav-links">
+      <a href="./index.html">Home</a>
+      <a href="./reddit.html">Reddit</a>
+      <a href="./bluesky.html" class="active">Bluesky</a>
+      <a href="./comparison.html">Comparison</a>
+    </div>
+  </nav>
+
+  <main class="dashboard-wrap">
+    <section class="filter-strip">
+      <div class="filter-box">
+        <p class="filter-title">Year</p>
+        <div class="button-row" id="year-buttons">
+          <button class="filter-btn active" data-year="overall">Overall</button>
+          <button class="filter-btn" data-year="2025">2025</button>
+          <button class="filter-btn" data-year="2026">2026</button>
+        </div>
+      </div>
+      <div class="filter-box">
+        <p class="filter-title">Months (Multi-select)</p>
+        <div class="button-row month-row" id="month-buttons"></div>
+      </div>
+    </section>
+
+    <section class="hero-board">
+      <div class="hero-head">
+        <h1>BLUESKY DASHBOARD</h1>
+        <span class="tag" id="data-mode-tag">Mode: Real-time</span>
+      </div>
+      <p class="hero-sub" id="scan-info">Loading data from backend...</p>
+    </section>
+
+    <section class="kpi-grid">
+      <article class="kpi"><p class="kpi-label">Total Posts</p><p class="kpi-value" id="kpi-total-posts">-</p><p class="kpi-note">Filtered period</p></article>
+      <article class="kpi"><p class="kpi-label">Total Engagement</p><p class="kpi-value" id="kpi-total-engagement">-</p><p class="kpi-note">posts + likes + follows</p></article>
+      <article class="kpi"><p class="kpi-label">Avg Engagement (Per Day)</p><p class="kpi-value" id="kpi-avg-engagement-day">-</p><p class="kpi-note">For selected period</p></article>
+      <article class="kpi"><p class="kpi-label">Avg Sentiment</p><p class="kpi-value" id="kpi-avg-sentiment">-</p><p class="kpi-note">To be added later</p></article>
+      <article class="kpi"><p class="kpi-label">Avg Score</p><p class="kpi-value" id="kpi-avg-score">-</p><p class="kpi-note">Not in firehose posts</p></article>
+      <article class="kpi"><p class="kpi-label">Avg Comments</p><p class="kpi-value" id="kpi-avg-comments">-</p><p class="kpi-note">Not in firehose posts</p></article>
+    </section>
+
+    <section class="analytics-grid">
+      <article class="panel">
+        <h3>Content Type Split</h3>
+        <div class="donut" id="content-split-donut"></div>
+        <div class="legend"><span id="legend-posts">Posts</span><span id="legend-comments">Likes + Follows</span></div>
+      </article>
+      <article class="panel">
+        <h3>Data Volume Over Time</h3>
+        <div class="volume-legend">
+          <span class="legend-item legend-posts">Posts</span>
+          <span class="legend-item legend-likes">Likes</span>
+          <span class="legend-item legend-follows">Follows</span>
+        </div>
+        <p class="volume-period-label" id="volume-period-label">Period: loading...</p>
+        <div class="volume-chart-wrap" id="volume-chart-wrap"></div>
+      </article>
+    </section>
+
+    <section class="bottom-grid">
+      <article class="panel">
+        <h3>Top Keywords</h3>
+        <div class="bar-list" id="top-keywords"></div>
+      </article>
+      <article class="panel">
+        <h3>Post Type Distribution</h3>
+        <div class="post-type-pie" id="post-type-pie"></div>
+        <div class="post-type-list" id="post-type-list"></div>
+      </article>
+    </section>
+  </main>
+
+  <div class="footer-note">Bluesky dashboard frame updated to analytics-board style.</div>
+  <script src="./bluesky.js"></script>
+</body>
+</html>
