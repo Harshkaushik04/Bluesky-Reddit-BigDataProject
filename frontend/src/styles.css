@@ -358,24 +358,28 @@ a { color: inherit; text-decoration: none; }
 }
 
 .track {
-  height: 8px;
-  border-radius: 2px;
-  background: #262c39;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.11);
   overflow: hidden;
+  box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.35);
 }
 
 .fill {
   height: 100%;
-  background: #ff3f50;
-  border-radius: 2px;
+  background: linear-gradient(90deg, #ff335f 0%, #ff7a3d 52%, #ffd166 100%);
+  border-radius: 999px;
+  box-shadow: 0 0 16px rgba(255, 63, 80, 0.32);
 }
 
 .page-shell[data-theme="bluesky"] .fill {
-  background: #2890ff;
+  background: linear-gradient(90deg, #20d3ff 0%, #2890ff 52%, #8b5cf6 100%);
+  box-shadow: 0 0 16px rgba(40, 144, 255, 0.34);
 }
 
 .page-shell[data-theme="comparison"] .fill {
-  background: #9d58ff;
+  background: linear-gradient(90deg, #f45cff 0%, #9d58ff 52%, #35d2ff 100%);
+  box-shadow: 0 0 16px rgba(157, 88, 255, 0.34);
 }
 
 .volume-legend {
@@ -480,8 +484,9 @@ a { color: inherit; text-decoration: none; }
 .monthly-bar {
   width: min(36px, 64%);
   min-height: 0;
-  border-radius: 2px;
+  border-radius: 999px 999px 6px 6px;
   transition: filter 0.2s ease, transform 0.2s ease;
+  box-shadow: 0 0 18px rgba(255, 255, 255, 0.12);
 }
 
 .monthly-bar:hover {
@@ -490,11 +495,13 @@ a { color: inherit; text-decoration: none; }
 }
 
 .monthly-bar-posts {
-  background: #ff4d67;
+  background: linear-gradient(180deg, #ffd166 0%, #ff6f4d 42%, #ff335f 100%);
+  box-shadow: 0 0 18px rgba(255, 77, 103, 0.32);
 }
 
 .monthly-bar-comments {
-  background: #ff8a3d;
+  background: linear-gradient(180deg, #ffe066 0%, #ff9f43 45%, #ff5f2e 100%);
+  box-shadow: 0 0 18px rgba(255, 138, 61, 0.32);
 }
 
 .monthly-label,
@@ -687,11 +694,13 @@ a { color: inherit; text-decoration: none; }
 }
 
 .opportunity-fill {
-  background: #22c55e;
+  background: linear-gradient(90deg, #5cff9d 0%, #22c55e 55%, #12d8a7 100%);
+  box-shadow: 0 0 16px rgba(34, 197, 94, 0.35);
 }
 
 .avoid-fill {
-  background: #ef4444;
+  background: linear-gradient(90deg, #ff9f43 0%, #ef4444 55%, #ff2d75 100%);
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.36);
 }
 
 .post-type-pie {
