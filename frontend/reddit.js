@@ -1,4 +1,4 @@
-const API_URL = "http://127.0.0.1:8000/api/reddit/overview";
+const API_URL = "http://10.116.37.242:8000/api/reddit/overview";
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const POST_TYPE_COLORS = {
   video: "#ff8a8a",

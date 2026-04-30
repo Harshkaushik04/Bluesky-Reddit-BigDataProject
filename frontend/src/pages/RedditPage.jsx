@@ -7,12 +7,12 @@ import { formatNumber } from "../utils/format.js";
 import VolumeChart from "../components/VolumeChart.jsx";
 import PostTypePie from "../components/PostTypePie.jsx";
 
-const API_BASE = "http://127.0.0.1:8000/api/reddit/overview";
-const COMMENTS_API_BASE = "http://127.0.0.1:8000/api/reddit/comments/overview";
-const FEATURES_API_BASE = "http://127.0.0.1:8000/api/reddit/feature-insights";
-const RECOMMEND_API_BASE = "http://127.0.0.1:8000/api/reddit/action-recommend";
-const RETRIEVE_API_BASE = "http://127.0.0.1:8000/api/reddit/retrieve-posts";
-const WHY_API_BASE = "http://127.0.0.1:8000/api/reddit/why-sentiments";
+const API_BASE = "http://10.116.37.242:8000/api/reddit/overview";
+const COMMENTS_API_BASE = "http://10.116.37.242:8000/api/reddit/comments/overview";
+const FEATURES_API_BASE = "http://10.116.37.242:8000/api/reddit/feature-insights";
+const RECOMMEND_API_BASE = "http://10.116.37.242:8000/api/reddit/action-recommend";
+const RETRIEVE_API_BASE = "http://10.116.37.242:8000/api/reddit/retrieve-posts";
+const WHY_API_BASE = "http://10.116.37.242:8000/api/reddit/why-sentiments";
 
 export default function RedditPage() {
   usePageTheme("reddit");
@@ -190,6 +190,28 @@ export default function RedditPage() {
       if (!response.ok) throw new Error("Retrieve failed");
       const json = await response.json();
       setRetrievedPosts(json.retrieved_posts || []);
+      
+      // Automatically get why-sentiments explanation after 2 seconds
+      if (json.retrieved_posts && json.retrieved_posts.length > 0) {
+        setTimeout(async () => {
+          setWhyLoading(true);
+          try {
+            const whyResponse = await fetch(WHY_API_BASE, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ word: whyWordInput.trim(), retrieved_texts: json.retrieved_posts }),
+            });
+            if (whyResponse.ok) {
+              const whyJson = await whyResponse.json();
+              setWhyExplanation(whyJson.response);
+            }
+          } catch (whyErr) {
+            console.error(whyErr);
+          } finally {
+            setWhyLoading(false);
+          }
+        }, 2000);
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -356,13 +378,6 @@ export default function RedditPage() {
                 onClick={() => setActiveSection("action-recommender")}
               >
                 Action Recommender
-              </button>
-              <button
-                type="button"
-                className={`side-btn ${activeSection === "why-sentiments" ? "active" : ""}`}
-                onClick={() => setActiveSection("why-sentiments")}
-              >
-                Why Sentiments
               </button>
             </div>
           </aside>

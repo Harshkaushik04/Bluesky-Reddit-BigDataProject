@@ -7,7 +7,7 @@ import VolumeChart from "../components/VolumeChart.jsx";
 import PostTypePie from "../components/PostTypePie.jsx";
 import { fetchJson } from "../utils/api.js";
 
-const REDDIT_API_BASE = "http://127.0.0.1:8000/api/reddit/overview";
+const REDDIT_API_BASE = "http://10.116.37.242:8000/api/reddit/overview";
 const BLUESKY_API_BASE = "http://127.0.0.1:8001";
 
 export default function ComparePage() {

@@ -1,4 +1,4 @@
-const API_URL = "http://127.0.0.1:8000/api/bluesky/overview";
+const API_URL = "http://10.116.37.242:8000/api/bluesky/overview";
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const POST_TYPE_COLORS = {
   video: "#66b2ff",

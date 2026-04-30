@@ -11,13 +11,13 @@ from qdrant_client import models
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "reddit_dashboard.db"
 COLLECTION_NAME = "reddit_posts_and_comments"
-BATCH_SIZE = 500
+BATCH_SIZE = 100
 
 NAMESPACE_REDDIT = uuid.uuid5(uuid.NAMESPACE_URL, "reddit.com")
 
 # --- 2. Initialize Qdrant Client ---
 print("Connecting to Qdrant...")
-client = QdrantClient(url="http://localhost:6333")
+client = QdrantClient(url="http://localhost:6333", timeout=60.0)
 
 try:
     client.get_collection(collection_name=COLLECTION_NAME)

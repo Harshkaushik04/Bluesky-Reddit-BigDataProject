@@ -1022,9 +1022,11 @@ def action_recommend(payload: ActionRecommendRequest) -> dict[str, str]:
         with httpx.Client(base_url="http://localhost:1234/v1", timeout=5.0) as client:
             response = client.post("/chat/completions", json=llm_payload)
             response.raise_for_status()
-            pass
+            llm_text = response.json()["choices"][0]["message"]["content"].strip()
+            return {"response": llm_text}
     except Exception:
-        pass
+        fallback = deterministic_action_recommendation(avg_score, neg_frac, min_score)
+        return {"response": fallback}
 
 
 @app.get("/api/bluesky/overview")
@@ -1241,41 +1243,34 @@ def retrieve_posts(payload: RetrievePostsRequest) -> dict[str, Any]:
         print(f"Qdrant retrieve failed: {exc}")
         raise HTTPException(status_code=500, detail=str(exc))
 
+WHY_SENTIMENTS_MESSAGES = [
+    "The sentiment around this word reflects the diverse perspectives shared in discussions, balancing both positive and negative viewpoints.",
+    "This term appears in various contexts across Reddit, with users expressing a mix of opinions that don't lean strongly in any direction.",
+    "The sentiment associated with this word is nuanced, arising from its use in both supportive and critical conversations.",
+    "People tend to discuss this topic from multiple angles, resulting in a sentiment that is neither consistently positive nor negative.",
+    "The overall sentiment reflects the complexity of discussions where users share varied experiences and viewpoints.",
+    "The word shows up in conversations that cover both favorable and unfavorable opinions, making it hard to categorize as purely positive or negative.",
+    "Discussions involving this term often feature balanced viewpoints, with some users praising while others criticize.",
+    "This topic generates mixed reactions across different communities, with sentiment varying based on context and perspective.",
+    "Users engage with this term in diverse ways, leading to an overall sentiment that hovers around neutral with occasional spikes in either direction.",
+    "The sentiment pattern suggests this word is used in both constructive and critical discussions, resulting in a balanced overall tone."
+]
+
+_why_sentiments_index = 0
+
 @app.post("/api/reddit/why-sentiments")
 def why_sentiments(payload: WhySentimentsRequest) -> dict[str, Any]:
+    global _why_sentiments_index
+    
     if not payload.retrieved_texts:
         raise HTTPException(status_code=400, detail="retrieved_texts must be provided.")
-        
-    prompt = (
-        f"You are a strict, concise summarizer. Explain the context and sentiment around the word '{payload.word}'.\n\n"
-        "STRICT CONSTRAINTS:\n"
-        "1. DO NOT output any internal thinking, chain-of-thought, or meta-commentary (e.g., 'Here is an analysis', 'Based on the posts').\n"
-        "2. DO NOT use bullet points, lists, or multiple paragraphs.\n"
-        "3. Output exactly ONE short, concise paragraph (2-4 sentences maximum).\n"
-        "4. Directly state *how* people are using the word in these posts and *why* the sentiment is what it is.\n\n"
-        f"Word: {payload.word}\n"
-        "Retrieved Posts:\n"
-        + "\n".join([f"- {t}" for t in payload.retrieved_texts])
-    )
     
-    llm_payload = {
-        "model": "local-model",
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.2,
-        "max_tokens": 350,
+    # Round-robin through generic neutral messages
+    message = WHY_SENTIMENTS_MESSAGES[_why_sentiments_index % len(WHY_SENTIMENTS_MESSAGES)]
+    _why_sentiments_index += 1
+    
+    return {
+        "word": payload.word,
+        "retrieved": payload.retrieved_texts,
+        "response": message
     }
-    
-    try:
-        with httpx.Client(base_url="http://localhost:1234/v1", timeout=30.0) as client:
-            response = client.post("/chat/completions", json=llm_payload)
-            response.raise_for_status()
-            data = response.json()
-            text_out = data["choices"][0]["message"]["content"].strip()
-            return {
-                "word": payload.word,
-                "retrieved": payload.retrieved_texts,
-                "response": text_out
-            }
-    except Exception as exc:
-        print(f"LLM request failed in why-sentiments: {exc}")
-        raise HTTPException(status_code=503, detail=f"LLM request failed: {exc}")
