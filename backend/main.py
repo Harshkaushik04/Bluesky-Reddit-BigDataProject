@@ -371,7 +371,7 @@ def reddit_overview(
         ).fetchall()
 
         title_rows = conn.execute(
-            f"SELECT title FROM reddit_post_facts WHERE {where_clause}",
+            f"SELECT title FROM reddit_post_facts WHERE {where_clause} AND post_type != 'comment'",
             where_params,
         ).fetchall()
         keyword_counter: Counter[str] = Counter()
@@ -654,7 +654,7 @@ def reddit_feature_insights(
             f"""
             SELECT created_date, title, score, ups, num_comments
             FROM reddit_post_facts
-            WHERE {where_clause}
+            WHERE {where_clause} AND post_type != 'comment'
             ORDER BY created_date ASC
             """,
             where_params,
